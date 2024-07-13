@@ -38,47 +38,46 @@ void ec_point_init(ec_point_t *point) { mpz_inits(point->x, point->y, NULL); }
 void ec_point_clear(ec_point_t *point) { mpz_clears(point->x, point->y, NULL); }
 
 void ec_point_add(ec_point_t *result, ec_point_t *p1, ec_point_t *p2, mpz_t p) {
-  mpz_t lambda, temp1, temp2, temp3;
-  mpz_inits(lambda, temp1, temp2, temp3, NULL);
+    mpz_t lambda, temp1, temp2, temp3;
+    mpz_inits(lambda, temp1, temp2, temp3, NULL);
 
-  if (mpz_cmp(p1->x, p2->x) == 0 && mpz_cmp(p1->y, p2->y) == 0) {
-    mpz_t three, two;
-    mpz_inits(three, two, NULL);
-    mpz_set_ui(three, 3);
-    mpz_set_ui(two, 2);
+    if (mpz_cmp(p1->x, p2->x) == 0 && mpz_cmp(p1->y, p2->y) == 0) {
+        mpz_t three, two;
+        mpz_inits(three, two, NULL);
+        mpz_set_ui(three, 3);
+        mpz_set_ui(two, 2);
 
-    mpz_mul(temp1, p1->x, p1->x);
-    mpz_mul(temp1, temp1, three);
-    mpz_mod(temp1, temp1, p);
+        mpz_mul(temp1, p1->x, p1->x);
+        mpz_mul(temp1, temp1, three);
+        mpz_mod(temp1, temp1, p);
 
-    mpz_mul(temp2, p1->y, two);
-    mpz_invert(temp2, temp2, p);
-    mpz_mul(lambda, temp1, temp2);
-    mpz_mod(lambda, lambda, p);
+        mpz_mul(temp2, p1->y, two);
+        mpz_invert(temp2, temp2, p);
+        mpz_mul(lambda, temp1, temp2);
+        mpz_mod(lambda, lambda, p);
 
-    mpz_clears(three, two, NULL);
-  } else if (mpz_cmp(p1->x, p2->x) == 0 && mpz_cmp(p1->y, p2->y) != 0) {
+        mpz_clears(three, two, NULL);
+    } else if (mpz_cmp(p1->x, p2->x) == 0 && mpz_cmp(p1->y, p2->y) != 0) {
+        mpz_clears(lambda, temp1, temp2, temp3, NULL);
+        return;
+    } else {
+        mpz_sub(temp1, p2->y, p1->y);
+        mpz_sub(temp2, p2->x, p1->x);
+        mpz_invert(temp2, temp2, p);
+        mpz_mul(lambda, temp1, temp2);
+        mpz_mod(lambda, lambda, p);
+    }
+
+    mpz_mul(temp1, lambda, lambda);
+    mpz_sub(temp1, temp1, p1->x);
+    mpz_sub(temp1, temp1, p2->x);
+    mpz_mod(result->x, temp1, p);
+    mpz_sub(temp1, p1->x, result->x);
+    mpz_mul(temp1, lambda, temp1);
+    mpz_sub(temp1, temp1, p1->y);
+    mpz_mod(result->y, temp1, p);
+
     mpz_clears(lambda, temp1, temp2, temp3, NULL);
-    return;
-  } else {
-    mpz_sub(temp1, p2->y, p1->y);
-    mpz_sub(temp2, p2->x, p1->x);
-    mpz_invert(temp2, temp2, p);
-    mpz_mul(lambda, temp1, temp2);
-    mpz_mod(lambda, lambda, p);
-  }
-
-  mpz_mul(temp1, lambda, lambda);
-  mpz_sub(temp1, temp1, p1->x);
-  mpz_sub(temp1, temp1, p2->x);
-  mpz_mod(result->x, temp1, p);
-
-  mpz_sub(temp1, p1->x, result->x);
-  mpz_mul(temp1, lambda, temp1);
-  mpz_sub(temp1, temp1, p1->y);
-  mpz_mod(result->y, temp1, p);
-
-  mpz_clears(lambda, temp1, temp2, temp3, NULL);
 }
 
 int ec_point_equal(ec_point_t *p1, ec_point_t *p2) {
@@ -156,107 +155,100 @@ void ec_point_set(ec_point_t *dest, ec_point_t *src) {
   mpz_set(dest->y, src->y);
 }
 
-void brent_algorithm(ec_point_t *start_point, ec_point_t *public_key, mpz_t p, volatile uint64_t *found_private_key) {
-  ec_point_t power, lam, tortoise, hare;
-  ec_point_init(&power);
-  ec_point_init(&lam);
-  ec_point_init(&tortoise);
-  ec_point_init(&hare);
-
-  mpz_t cycle_length, power_of_two, lam_temp;
-  mpz_inits(cycle_length, power_of_two, lam_temp, NULL);
-
-  mpz_set_ui(cycle_length, 1);
-  mpz_set_ui(power_of_two, 1);
-
-  ec_point_add(&power, start_point, public_key, p);
-  ec_point_add(&tortoise, start_point, public_key, p);
-  ec_point_add(&hare, &tortoise, public_key, p);
-
-  while (!found_collision) {
-    if (mpz_cmp(cycle_length, power_of_two) == 0) {
-      mpz_mul_ui(power_of_two, power_of_two, 2);
-      mpz_set(cycle_length, power_of_two);
-      ec_point_set(&tortoise, &hare);
-    }
-
-    ec_point_add(&hare, &hare, public_key, p);
-    mpz_add_ui(cycle_length, cycle_length, 1);
-
-    if (ec_point_equal(&hare, &tortoise)) {
-      pthread_mutex_lock(&collision_mutex);
-      *found_private_key = mpz_get_ui(cycle_length);
-      found_collision = 1;
-      printf("\rCollision found! Private key: %lu\n", *found_private_key);
-      fflush(stdout);
-      pthread_mutex_unlock(&collision_mutex);
-      break;
-    }
-  }
-
-  ec_point_clear(&power);
-  ec_point_clear(&lam);
-  ec_point_clear(&tortoise);
-  ec_point_clear(&hare);
-  mpz_clears(cycle_length, power_of_two, lam_temp, NULL);
-}
-
 void *thread_function(void *arg) {
-  thread_arg_t *thread_args = (thread_arg_t *)arg;
-  ec_point_t *public_key = &thread_args->public_key;
-  mpz_t p;
-  mpz_init_set(p, thread_args->p);
-  ec_point_t temp, result;
-  ec_point_init(&temp);
-  ec_point_init(&result);
+    thread_arg_t *thread_args = (thread_arg_t *)arg;
+    ec_point_t *public_key = &thread_args->public_key;
+    mpz_t p;
+    mpz_init_set(p, thread_args->p);
+    ec_point_t temp, result;
+    ec_point_init(&temp);
+    ec_point_init(&result);
 
-  mpz_set(temp.x, public_key->x);
-  mpz_set(temp.y, public_key->y);
+    mpz_set(temp.x, public_key->x);
+    mpz_set(temp.y, public_key->y);
 
-  mpz_t current_k;
-  mpz_init_set(current_k, thread_args->start_k);
+    mpz_t current_k;
+    mpz_init_set(current_k, thread_args->start_k);
 
-  struct timespec last_update_time, current_time;
-  clock_gettime(CLOCK_MONOTONIC, &last_update_time);
-  clock_gettime(CLOCK_MONOTONIC, &current_time);
+    struct timespec last_update_time, current_time;
+    clock_gettime(CLOCK_MONOTONIC, &last_update_time);
+    clock_gettime(CLOCK_MONOTONIC, &current_time);
 
-  while (mpz_cmp(current_k, thread_args->end_k) < 0 && !found_collision) {
-    ec_point_add(&result, &temp, public_key, p);
-    mpz_set(temp.x, result.x);
-    mpz_set(temp.y, result.y);
+    ec_point_t power, lam, tortoise, hare;
+    ec_point_init(&power);
+    ec_point_init(&lam);
+    ec_point_init(&tortoise);
+    ec_point_init(&hare);
 
-    mpz_add_ui(current_k, current_k, 1);
+    mpz_t cycle_length, power_of_two, lam_temp;
+    mpz_inits(cycle_length, power_of_two, lam_temp, NULL);
 
-    pthread_mutex_lock(&step_mutex);
-    current_step++;
-    pthread_mutex_unlock(&step_mutex);
+    mpz_set_ui(cycle_length, 1);
+    mpz_set_ui(power_of_two, 1);
 
-    show_progress(current_step, thread_args->end_k, thread_args->end_k, &current_time);
+    ec_point_set(&power, &temp);
+    ec_point_set(&tortoise, &temp);
+    ec_point_add(&hare, &tortoise, public_key, p);
 
-    if (ec_point_equal(&result, public_key)) {
-      pthread_mutex_lock(&collision_mutex);
-      if (!found_collision) {
-        private_key = mpz_get_ui(current_k);
-        found_collision = 1;
-        printf("\rCollision found! Private key: %lu\n", private_key);
-        fflush(stdout);
-      }
-      pthread_mutex_unlock(&collision_mutex);
-      break;
+    while (mpz_cmp(current_k, thread_args->end_k) < 0 && !found_collision) {
+        ec_point_add(&result, &temp, public_key, p);
+        mpz_set(temp.x, result.x);
+        mpz_set(temp.y, result.y);
+
+        mpz_add_ui(current_k, current_k, 1);
+
+        pthread_mutex_lock(&step_mutex);
+        current_step++;
+        pthread_mutex_unlock(&step_mutex);
+
+        show_progress(current_step, thread_args->end_k, thread_args->end_k, &current_time);
+
+        if (ec_point_equal(&result, public_key)) {
+            pthread_mutex_lock(&collision_mutex);
+            if (!found_collision) {
+                private_key = mpz_get_ui(current_k);
+                found_collision = 1;
+                printf("\rCollision found! Private key: %lu\n", private_key);
+                fflush(stdout);
+            }
+            pthread_mutex_unlock(&collision_mutex);
+            break;
+        }
+
+        if (mpz_cmp(cycle_length, power_of_two) == 0) {
+            mpz_mul_ui(power_of_two, power_of_two, 2);
+            mpz_set(cycle_length, power_of_two);
+            ec_point_set(&tortoise, &hare);
+        }
+
+        ec_point_add(&hare, &hare, public_key, p);
+        mpz_add_ui(cycle_length, cycle_length, 1);
+
+        if (ec_point_equal(&hare, &tortoise)) {
+            pthread_mutex_lock(&collision_mutex);
+            if (!found_collision) {
+                private_key = mpz_get_ui(current_k);
+                found_collision = 1;
+                printf("\rCollision found by Brent! Private key: %lu\n", private_key);
+                fflush(stdout);
+            }
+            pthread_mutex_unlock(&collision_mutex);
+            break;
+        }
     }
-  }
 
-  pthread_mutex_lock(&collision_mutex);
-  if (!found_collision){
-    brent_algorithm(&temp, public_key, p, &private_key);
-  }
-  pthread_mutex_unlock(&collision_mutex);
+    mpz_clear(current_k);
+    ec_point_clear(&temp);
+    ec_point_clear(&result);
+    mpz_clear(p);
 
-  mpz_clear(current_k);
-  ec_point_clear(&temp);
-  ec_point_clear(&result);
-  mpz_clear(p);
-  return NULL;
+    ec_point_clear(&power);
+    ec_point_clear(&lam);
+    ec_point_clear(&tortoise);
+    ec_point_clear(&hare);
+    mpz_clears(cycle_length, power_of_two, lam_temp, NULL);
+    
+    return NULL;
 }
 
 int pollardsrho(int argc, char *argv[]) {
