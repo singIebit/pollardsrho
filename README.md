@@ -72,6 +72,8 @@ Contributions are welcome! Feel free to open issues or submit pull requests.
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
+## Add a Star ⭐️
+
 [![Add Star](https://img.shields.io/github/stars/singIebit/pollardsrho?style=social)](https://github.com/singIebit/pollardsrho)
 
 ---
