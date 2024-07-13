@@ -72,17 +72,7 @@ Contributions are welcome! Feel free to open issues or submit pull requests.
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-## Add a Star: [![Add Star](https://img.shields.io/github/stars/singIebit/pollardsrho?style=social)](https://github.com/singIebit/pollardsrho) ⭐️
-
-## Add a Star: [![GitHub stars](https://img.shields.io/github/stars/singIebit/pollardsrho)](https://github.com/singIebit/pollardsrho/stargazers)
-
-## Add a Star: [![GitHub stars](https://img.shields.io/github/stars/singIebit/pollardsrho?style=flat-square)](https://github.com/singIebit/pollardsrho/stargazers)
-
-## Add a Star: [![GitHub stars](https://img.shields.io/github/stars/singIebit/pollardsrho?style=flat)](https://github.com/singIebit/pollardsrho/stargazers)
-
-## Add a Star: [![GitHub stars](https://img.shields.io/github/stars/singIebit/pollardsrho?label=Stars&logo=github)](https://github.com/singIebit/pollardsrho/stargazers)
-
-## Add a Star: [![GitHub stars](https://img.shields.io/github/stars/singIebit/pollardsrho?color=yellow&label=Give%20a%20star)](https://github.com/singIebit/pollardsrho/stargazers)
+## Add a Star ⭐️: [![GitHub stars](https://img.shields.io/github/stars/singIebit/pollardsrho?style=flat-square)](https://github.com/singIebit/pollardsrho/stargazers)
 
 ---
 
