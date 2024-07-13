@@ -68,11 +68,11 @@ This repository features implementations that optimize Pollard's rho with Brent'
 
 Contributions are welcome! Feel free to open issues or submit pull requests.
 
+Add a Star : [![GitHub stars](https://img.shields.io/github/stars/singIebit/pollardsrho?style=flat-square)](https://github.com/singIebit/pollardsrho/stargazers)
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
-### Add a Star : [![GitHub stars](https://img.shields.io/github/stars/singIebit/pollardsrho?style=flat-square)](https://github.com/singIebit/pollardsrho/stargazers)
 
 ---
 
