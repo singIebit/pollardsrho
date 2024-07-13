@@ -1,4 +1,4 @@
-# Pollard's Rho and Brent's Algorithm for SECP256k1 Curve
+# Pollard's Rho and Brent's Algorithm for SECP256K1 Curve
 
 ![C](https://img.shields.io/badge/language-C-blue)
 ![GMP](https://img.shields.io/badge/dependency-GMP-green)
@@ -71,6 +71,8 @@ Contributions are welcome! Feel free to open issues or submit pull requests.
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+[![Add Star](https://img.shields.io/github/stars/your-username/your-repo?style=social)](https://github.com/singIebit/pollardsrho)
 
 ---
 
