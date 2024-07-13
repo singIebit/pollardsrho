@@ -30,13 +30,19 @@ This repository features implementations that optimize Pollard's rho with Brent'
     cd pollardsrho
     ```
 
-2. Compile the project:
+2. Install the libgmp-dev:
+    ```bash
+    sudo apt-get update
+    sudo apt-get install libgmp-dev
+    ```
+
+3. Compile the project:
     ```bash
     cmake .
     make
     ```
 
-3. Run the program:
+4. Run the program:
     ```bash
     ./pollardsrho <public key> <key range>
     ```
