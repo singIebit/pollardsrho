@@ -7,13 +7,13 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <stdatomic.h>
 
-#define NUM_THREADS 8
+#define NUM_THREADS 1
 
 typedef struct {
   mpz_t x;
   mpz_t y;
-  uint64_t k;
 } ec_point_t;
 
 typedef struct {
@@ -24,11 +24,10 @@ typedef struct {
   mpz_t end_k;
 } thread_arg_t;
 
-volatile uint64_t current_step = 0;
-volatile uint64_t private_key = 0;
-volatile int found_collision = 0;
+atomic_uint_least64_t current_step = 0;
+atomic_uint_least64_t private_key = 0;
+atomic_int found_collision = 0;
 
-pthread_mutex_t step_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t collision_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 const char *P_HEX = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F";
@@ -38,8 +37,8 @@ void ec_point_init(ec_point_t *point) { mpz_inits(point->x, point->y, NULL); }
 void ec_point_clear(ec_point_t *point) { mpz_clears(point->x, point->y, NULL); }
 
 void ec_point_add(ec_point_t *result, ec_point_t *p1, ec_point_t *p2, mpz_t p) {
-    mpz_t lambda, temp1, temp2, temp3;
-    mpz_inits(lambda, temp1, temp2, temp3, NULL);
+    mpz_t lambda, temp1, temp2;
+    mpz_inits(lambda, temp1, temp2, NULL);
 
     if (mpz_cmp(p1->x, p2->x) == 0 && mpz_cmp(p1->y, p2->y) == 0) {
         mpz_t three, two;
@@ -57,8 +56,8 @@ void ec_point_add(ec_point_t *result, ec_point_t *p1, ec_point_t *p2, mpz_t p) {
         mpz_mod(lambda, lambda, p);
 
         mpz_clears(three, two, NULL);
-    } else if (mpz_cmp(p1->x, p2->x) == 0 && mpz_cmp(p1->y, p2->y) != 0) {
-        mpz_clears(lambda, temp1, temp2, temp3, NULL);
+    } else if (mpz_cmp(p1->x, p2->x) == 0) {
+        mpz_clears(lambda, temp1, temp2, NULL);
         return;
     } else {
         mpz_sub(temp1, p2->y, p1->y);
@@ -77,7 +76,7 @@ void ec_point_add(ec_point_t *result, ec_point_t *p1, ec_point_t *p2, mpz_t p) {
     mpz_sub(temp1, temp1, p1->y);
     mpz_mod(result->y, temp1, p);
 
-    mpz_clears(lambda, temp1, temp2, temp3, NULL);
+    mpz_clears(lambda, temp1, temp2, NULL);
 }
 
 int ec_point_equal(ec_point_t *p1, ec_point_t *p2) {
@@ -106,7 +105,7 @@ int y_coordinate_from_compressed(mpz_t y, mpz_t x, const char *prefix, mpz_t p) 
   return 1;
 }
 
-void show_progress(uint64_t current_step, mpz_t max_k, mpz_t key_range, struct timespec *last_update_time) {
+void show_progress(uint64_t current_step, mpz_t max_k, struct timespec *last_update_time) {
   struct timespec current_time;
   clock_gettime(CLOCK_MONOTONIC, &current_time);
 
@@ -115,7 +114,7 @@ void show_progress(uint64_t current_step, mpz_t max_k, mpz_t key_range, struct t
 
   if (elapsed_sec >= 1.0) {
     double current_steps_per_sec = (double)(current_step - last_step_count) / elapsed_sec;
-    char *steps_per_second_unit;
+    const char *steps_per_second_unit;
 
     if (current_steps_per_sec >= 1e18) {
       current_steps_per_sec /= 1e18;
@@ -135,11 +134,11 @@ void show_progress(uint64_t current_step, mpz_t max_k, mpz_t key_range, struct t
     } else if (current_steps_per_sec >= 1e3) {
       current_steps_per_sec /= 1e3;
       steps_per_second_unit = "Ks/s";
-    } else if (current_steps_per_sec <= 999) {
+    } else {
       steps_per_second_unit = "S/s";
     }
 
-    double key_range_double = mpz_get_d(key_range);
+    double key_range_double = mpz_get_d(max_k);
     int bits = (int)round(log2(key_range_double));
 
     printf("\rSteps: %llu %.2f %s Key Range: %d bits", (unsigned long long)current_step, current_steps_per_sec, steps_per_second_unit, bits);
@@ -156,99 +155,55 @@ void ec_point_set(ec_point_t *dest, ec_point_t *src) {
 }
 
 void *thread_function(void *arg) {
-    thread_arg_t *thread_args = (thread_arg_t *)arg;
-    ec_point_t *public_key = &thread_args->public_key;
-    mpz_t p;
-    mpz_init_set(p, thread_args->p);
-    ec_point_t temp, result;
-    ec_point_init(&temp);
-    ec_point_init(&result);
+  thread_arg_t *thread_args = (thread_arg_t *)arg;
+  ec_point_t *public_key = &thread_args->public_key;
+  mpz_t p;
+  mpz_init_set(p, thread_args->p);
+  ec_point_t temp, result;
+  ec_point_init(&temp);
+  ec_point_init(&result);
 
-    mpz_set(temp.x, public_key->x);
-    mpz_set(temp.y, public_key->y);
+  mpz_set(temp.x, public_key->x);
+  mpz_set(temp.y, public_key->y);
 
-    mpz_t current_k;
-    mpz_init_set(current_k, thread_args->start_k);
+  mpz_t current_k, end_k;
+  mpz_init_set(current_k, thread_args->start_k);
+  mpz_init_set(end_k, thread_args->end_k);
 
-    struct timespec last_update_time, current_time;
-    clock_gettime(CLOCK_MONOTONIC, &last_update_time);
-    clock_gettime(CLOCK_MONOTONIC, &current_time);
+  struct timespec last_update_time;
+  clock_gettime(CLOCK_MONOTONIC, &last_update_time);
 
-    ec_point_t power, lam, tortoise, hare;
-    ec_point_init(&power);
-    ec_point_init(&lam);
-    ec_point_init(&tortoise);
-    ec_point_init(&hare);
+  while (mpz_cmp(current_k, end_k) < 0 && !atomic_load(&found_collision)) {
+      ec_point_add(&result, &temp, public_key, p);
+      mpz_set(temp.x, result.x);
+      mpz_set(temp.y, result.y);
 
-    mpz_t cycle_length, power_of_two, lam_temp;
-    mpz_inits(cycle_length, power_of_two, lam_temp, NULL);
+      mpz_add_ui(current_k, current_k, 1);
 
-    mpz_set_ui(cycle_length, 1);
-    mpz_set_ui(power_of_two, 1);
+      atomic_fetch_add(&current_step, 1);
 
-    ec_point_set(&power, &temp);
-    ec_point_set(&tortoise, &temp);
-    ec_point_add(&hare, &tortoise, public_key, p);
+      show_progress(current_step, thread_args->end_k, &last_update_time);
 
-    while (mpz_cmp(current_k, thread_args->end_k) < 0 && !found_collision) {
-        ec_point_add(&result, &temp, public_key, p);
-        mpz_set(temp.x, result.x);
-        mpz_set(temp.y, result.y);
+      if (ec_point_equal(&result, public_key)) {
+          pthread_mutex_lock(&collision_mutex);
+          if (!atomic_load(&found_collision)) {
+              atomic_store(&private_key, mpz_get_ui(current_k));
+              atomic_store(&found_collision, 1);
+              printf("\rCollision found! Private key: %lu\n", atomic_load(&private_key));
+              fflush(stdout);
+          }
+          pthread_mutex_unlock(&collision_mutex);
+          break;
+      }
+  }
 
-        mpz_add_ui(current_k, current_k, 1);
+  mpz_clear(current_k);
+  mpz_clear(end_k);
+  ec_point_clear(&temp);
+  ec_point_clear(&result);
+  mpz_clear(p);
 
-        pthread_mutex_lock(&step_mutex);
-        current_step++;
-        pthread_mutex_unlock(&step_mutex);
-
-        show_progress(current_step, thread_args->end_k, thread_args->end_k, &current_time);
-
-        if (ec_point_equal(&result, public_key)) {
-            pthread_mutex_lock(&collision_mutex);
-            if (!found_collision) {
-                private_key = mpz_get_ui(current_k);
-                found_collision = 1;
-                printf("\rCollision found! Private key: %lu\n", private_key);
-                fflush(stdout);
-            }
-            pthread_mutex_unlock(&collision_mutex);
-            break;
-        }
-
-        if (mpz_cmp(cycle_length, power_of_two) == 0) {
-            mpz_mul_ui(power_of_two, power_of_two, 2);
-            mpz_set(cycle_length, power_of_two);
-            ec_point_set(&tortoise, &hare);
-        }
-
-        ec_point_add(&hare, &hare, public_key, p);
-        mpz_add_ui(cycle_length, cycle_length, 1);
-
-        if (ec_point_equal(&hare, &tortoise)) {
-            pthread_mutex_lock(&collision_mutex);
-            if (!found_collision) {
-                private_key = mpz_get_ui(current_k);
-                found_collision = 1;
-                printf("\rCollision found by Brent! Private key: %lu\n", private_key);
-                fflush(stdout);
-            }
-            pthread_mutex_unlock(&collision_mutex);
-            break;
-        }
-    }
-
-    mpz_clear(current_k);
-    ec_point_clear(&temp);
-    ec_point_clear(&result);
-    mpz_clear(p);
-
-    ec_point_clear(&power);
-    ec_point_clear(&lam);
-    ec_point_clear(&tortoise);
-    ec_point_clear(&hare);
-    mpz_clears(cycle_length, power_of_two, lam_temp, NULL);
-    
-    return NULL;
+  return NULL;
 }
 
 int pollardsrho(int argc, char *argv[]) {
@@ -265,8 +220,7 @@ int pollardsrho(int argc, char *argv[]) {
 
   char *public_key_hex = argv[1];
   if (strlen(public_key_hex) != 66) {
-    fprintf(stderr, "Invalid public key length. Expected 66 characters (33 "
-                    "bytes in hex).\n");
+    fprintf(stderr, "Invalid public key length. Expected 66 characters (33 bytes in hex).\n");
     return 1;
   }
 
@@ -279,8 +233,7 @@ int pollardsrho(int argc, char *argv[]) {
 
   mpz_set_str(public_key_a.x, x_hex, 16);
   if (!y_coordinate_from_compressed(public_key_a.y, public_key_a.x, prefix, p)) {
-    fprintf(stderr,
-            "Failed to calculate y-coordinate from compressed public key.\n");
+    fprintf(stderr, "Failed to calculate y-coordinate from compressed public key.\n");
     return 1;
   }
 
@@ -333,7 +286,7 @@ int pollardsrho(int argc, char *argv[]) {
   mpz_clears(p, key_range, max_k, range_size, thread_range, start_k, NULL);
 
   pthread_mutex_lock(&collision_mutex);
-  if (!found_collision) {
+  if (!atomic_load(&found_collision)) {
     printf("\rNo collision found within the given range.\n");
     fflush(stdout);
   }
@@ -343,5 +296,5 @@ int pollardsrho(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
-    return pollardsrho(argc, argv);
+  return pollardsrho(argc, argv);
 }
