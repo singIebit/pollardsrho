@@ -38,7 +38,6 @@ This repository features implementations that optimize Pollard's rho with Brent'
 
 3. Compile the project:
     ```bash
-    cmake .
     make
     ```
 
