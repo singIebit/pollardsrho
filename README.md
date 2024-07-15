@@ -8,7 +8,8 @@
 
 ## Description
 
-This repository contains an adaptation of Pollard's Rho algorithm for deriving points on the elliptic curve secp256k1. This implementation focuses on generating elliptic curve points using a public key as the initial parameter.
+This repository contains an adaptation of Pollard's Rho algorithm for deriving points on the elliptic curve secp256k1. 
+ This implementation focuses on generating elliptic curve points using a public key as the initial parameter.
 
 #### Features
 
