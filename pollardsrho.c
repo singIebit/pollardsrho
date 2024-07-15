@@ -154,11 +154,59 @@ void ec_point_set(ec_point_t *dest, ec_point_t *src) {
   mpz_set(dest->y, src->y);
 }
 
+void generate_derived_points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t n_half, int num_points) {
+    mpz_t increment;
+    mpz_init(increment);
+    mpz_div_ui(increment, n_half, num_points);
+
+    ec_point_t temp, G;
+    ec_point_init(&temp);
+    ec_point_init(&G);
+
+    mpz_set(G.x, Gx);
+    mpz_set(G.y, Gy);
+
+    for (int i = 0; i < num_points; i++) {
+        mpz_mul_ui(temp.x, increment, i);
+
+        if (mpz_sgn(temp.x) == 0) {
+            mpz_clears(increment, NULL);
+            ec_point_clear(&temp);
+            ec_point_clear(&G);
+            return;
+        }
+
+        ec_point_add(&derived_points[i], A, &G, temp.x);
+
+        // Mirror the point (x, y) to (x, -y)
+        mpz_set(derived_points[num_points + i].x, derived_points[i].x);
+        mpz_sub(derived_points[num_points + i].y, G.y, derived_points[i].y);
+    }
+
+    mpz_clear(increment);
+    ec_point_clear(&temp);
+    ec_point_clear(&G);
+}
+
 void *thread_function(void *arg) {
   thread_arg_t *thread_args = (thread_arg_t *)arg;
   ec_point_t *public_key = &thread_args->public_key;
-  mpz_t p;
-  mpz_init_set(p, thread_args->p);
+  mpz_t p, Gx, Gy, n, n_half;
+  mpz_inits(p, Gx, Gy, n, n_half, NULL);
+  mpz_set(p, thread_args->p);
+
+  mpz_set_str(Gx, "79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798", 16);
+  mpz_set_str(Gy, "483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8", 16);
+  mpz_set_str(n, "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16);
+  mpz_tdiv_q_ui(n_half, n, 2);
+
+  int num_derived_points = 32000;
+  ec_point_t derived_points[2 * num_derived_points];
+  for (int i = 0; i < 2 * num_derived_points; i++) {
+    ec_point_init(&derived_points[i]);
+  }
+  generate_derived_points(derived_points, public_key, Gx, Gy, n_half, num_derived_points);
+
   ec_point_t temp, result;
   ec_point_init(&temp);
   ec_point_init(&result);
@@ -178,8 +226,11 @@ void *thread_function(void *arg) {
       mpz_set(temp.x, result.x);
       mpz_set(temp.y, result.y);
 
-      mpz_add_ui(current_k, current_k, 1);
+      if (mpz_cmp_ui(temp.y, 0) < 0) {
+          mpz_sub(temp.y, p, temp.y);
+      }
 
+      mpz_add_ui(current_k, current_k, 1);
       atomic_fetch_add(&current_step, 1);
 
       show_progress(current_step, thread_args->end_k, &last_update_time);
@@ -195,13 +246,31 @@ void *thread_function(void *arg) {
           pthread_mutex_unlock(&collision_mutex);
           break;
       }
+
+      for (int i = 0; i < 2 * num_derived_points; i++) {
+          if (ec_point_equal(&result, &derived_points[i])) {
+              pthread_mutex_lock(&collision_mutex);
+              if (!atomic_load(&found_collision)) {
+                  atomic_store(&private_key, mpz_get_ui(current_k));
+                  atomic_store(&found_collision, 1);
+                  printf("\rCollision found with derived point! Private key: %lu\n", atomic_load(&private_key));
+                  fflush(stdout);
+              }
+              pthread_mutex_unlock(&collision_mutex);
+              break;
+          }
+      }
   }
 
   mpz_clear(current_k);
   mpz_clear(end_k);
+  mpz_clear(n_half);
   ec_point_clear(&temp);
   ec_point_clear(&result);
-  mpz_clear(p);
+  for (int i = 0; i < 2 * num_derived_points; i++) {
+    ec_point_clear(&derived_points[i]);
+  }
+  mpz_clears(p, Gx, Gy, n, NULL);
 
   return NULL;
 }
@@ -249,8 +318,9 @@ int pollardsrho(int argc, char *argv[]) {
   mpz_t range_size, thread_range, start_k;
   mpz_inits(range_size, thread_range, start_k, NULL);
   mpz_set(range_size, max_k);
-  mpz_div_ui(thread_range, range_size, NUM_THREADS);
+  mpz_tdiv_q_ui(thread_range, range_size, NUM_THREADS);
 
+  mpz_set_ui(start_k, 0);
   for (int i = 0; i < NUM_THREADS; i++) {
     thread_args[i].thread_id = i;
     thread_args[i].public_key = public_key_a;
