@@ -8,15 +8,67 @@
 
 ## Description
 
-This repository implements an adaptation of Pollard's rho algorithm tailored to discover collisions by deriving points from a given public key on the secp256k1 elliptic curve. The algorithm utilizes multithreaded processing to efficiently search for points that collide with iterates derived from the public key. This approach aims to identify instances where iterated points match the initial public key or its derived points, indicating a collision.
+### Pollard's Rho Adaptation for Elliptic Curve Point Derivation
 
-### Key Features
+This repository contains an adaptation of Pollard's Rho algorithm for deriving points on the elliptic curve secp256k1. This implementation focuses on generating elliptic curve points using a public key as the initial parameter.
 
-- **Collision Detection**: Implements Pollard's rho algorithm to detect collisions by iteratively deriving and comparing points on the secp256k1 curve.
-  
-- **Multithreaded Processing**: Utilizes pthreads for parallel computation, enhancing performance in collision detection across multiple threads.
-  
-- **Real-time Progress Monitoring**: Provides continuous updates on the computation progress, offering insights into the ongoing collision search.
+#### Features
+
+- **Elliptic Curve Arithmetic**: Implementation of elliptic curve point addition, doubling, and equality check.
+- **Compressed Public Key Handling**: Computes the y-coordinate from a compressed public key.
+- **Multi-threading**: Uses pthreads to parallelize the point derivation process.
+- **Progress Reporting**: Displays real-time progress with step count and key range.
+- **Atomic Operations**: Ensures thread-safe operations using atomic variables and mutexes.
+
+#### Prerequisites
+
+- GMP Library: Ensure GMP is installed on your system.
+- Pthreads: POSIX thread library for multi-threading support.
+
+#### Usage
+
+Compile the code using a C compiler, for example, `gcc`:
+
+```sh
+gcc -o pollardsrho pollardsrho.c -lgmp -lpthread -lm
+```
+
+Run the executable with the required arguments:
+
+```sh
+./pollardsrho <public_key> <key_range>
+```
+
+- `<public_key>`: Compressed public key in hexadecimal format (66 characters).
+- `<key_range>`: Range of private keys to search (in bits).
+
+Example:
+
+```sh
+./pollardsrho 02c6047f9441ed7d6d3045406e95c07cd85a8743e7b6842c1d7eaa2b47865c39 128
+```
+
+#### Example Output
+
+The program displays real-time progress including the steps per second and key range:
+
+```sh
+Steps: 100000 5000.00 Ks/s Key Range: 128 bits
+```
+
+If a collision is found, the program outputs the private key:
+
+```sh
+Collision found! Private key: 123456789
+```
+
+#### Detailed Functionality
+
+- **Elliptic Curve Operations**: Functions for point initialization, addition, and clearing of elliptic curve points.
+- **Thread Management**: Each thread searches a specific range of private keys for a collision.
+- **Collision Detection**: Checks for collisions between the computed points and the public key or derived points.
+
+This implementation aims to provide a scalable and efficient solution for deriving elliptic curve points using Pollard's Rho algorithm, making it suitable for educational purposes and cryptographic research.
 
 This repository is intended for cryptographic enthusiasts and researchers interested in exploring advanced collision detection techniques on elliptic curves.
 
