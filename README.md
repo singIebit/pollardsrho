@@ -1,26 +1,26 @@
-# Pollard's Rho and Brent's Algorithm for SECP256K1 Curve
+# Pollard's Rho Algorithm for SECP256K1 Curve
 
 ![C](https://img.shields.io/badge/language-C-blue)
 ![GMP](https://img.shields.io/badge/dependency-GMP-green)
 ![pthreads](https://img.shields.io/badge/dependency-pthreads-yellow)
 
+---
+
 ## Description
 
-Pollard's rho algorithm is renowned for integer factorization, leveraging minimal space with an expected runtime proportional to the square root of the smallest prime factor. Brent's cycle-detection algorithm, originating from numerical analysis, enhances Pollard's rho by efficiently identifying cycles in sequences of iterates. This hybrid method combines the bisection, secant, and inverse quadratic interpolation techniques.
+This repository implements an adaptation of Pollard's rho algorithm tailored to discover collisions by deriving points from a given public key on the secp256k1 elliptic curve. The algorithm utilizes multithreaded processing to efficiently search for points that collide with iterates derived from the public key. This approach aims to identify instances where iterated points match the initial public key or its derived points, indicating a collision.
 
-This repository features implementations that optimize Pollard's rho with Brent's algorithm to tackle discrete logarithm challenges on the secp256k1 elliptic curve. The goal is to determine the relationship between points 𝐺 (base point),  𝑃 (given point),  and the integer 𝑥 such that 𝑃 = 𝑥𝐺.
+### Key Features
 
-## Features
+- **Collision Detection**: Implements Pollard's rho algorithm to detect collisions by iteratively deriving and comparing points on the secp256k1 curve.
+  
+- **Multithreaded Processing**: Utilizes pthreads for parallel computation, enhancing performance in collision detection across multiple threads.
+  
+- **Real-time Progress Monitoring**: Provides continuous updates on the computation progress, offering insights into the ongoing collision search.
 
-- **Collision Detection**
-  - Finds collisions efficiently using Pollard's Rho and Brent's Algorithm.
-  - Optimized for the secp256k1 elliptic curve.
+This repository is intended for cryptographic enthusiasts and researchers interested in exploring advanced collision detection techniques on elliptic curves.
 
-- **Parallel Processing**
-  - Utilizes multithreading with pthreads to speed up calculations.
-
-- **Progress Monitoring**
-  - Displays real-time progress updates during the search for collisions.
+---
 
 ## Installation
 
