@@ -4,12 +4,13 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
 #include <stdatomic.h>
 
-#define NUM_THREADS 1
+#define NUM_THREADS 8
 
 typedef struct {
   mpz_t x;
@@ -29,6 +30,8 @@ atomic_uint_least64_t private_key = 0;
 atomic_int found_collision = 0;
 
 pthread_mutex_t collision_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static bool loading_points = true;
 
 const char *P_HEX = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F";
 
@@ -154,10 +157,10 @@ void ec_point_set(ec_point_t *dest, ec_point_t *src) {
   mpz_set(dest->y, src->y);
 }
 
-void generate_derived_points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t n_half, int num_points) {
+void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t p, int num_points) {
     mpz_t increment;
     mpz_init(increment);
-    mpz_div_ui(increment, n_half, num_points);
+    mpz_tdiv_q_ui(increment, p, num_points);
 
     ec_point_t temp, G;
     ec_point_init(&temp);
@@ -166,26 +169,87 @@ void generate_derived_points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx
     mpz_set(G.x, Gx);
     mpz_set(G.y, Gy);
 
-    for (int i = 0; i < num_points; i++) {
-        mpz_mul_ui(temp.x, increment, i);
+    ec_point_t x1, x2;
+    ec_point_init(&x1);
+    ec_point_init(&x2);
 
-        if (mpz_sgn(temp.x) == 0) {
-            mpz_clears(increment, NULL);
-            ec_point_clear(&temp);
-            ec_point_clear(&G);
-            return;
+    mpz_set(x1.x, A->x);
+    mpz_set(x1.y, A->y);
+    mpz_set(x2.x, A->x);
+    mpz_set(x2.y, A->y);
+
+    mpz_t a1, a2, b1, b2;
+    mpz_inits(a1, a2, b1, b2, NULL);
+    mpz_set_ui(a1, 0);
+    mpz_set_ui(a2, 1);
+    mpz_set_ui(b1, 0);
+    mpz_set_ui(b2, 1);
+
+    ec_point_t tortoise, hare;
+    ec_point_init(&tortoise);
+    ec_point_init(&hare);
+    ec_point_set(&tortoise, &x1);
+    ec_point_set(&hare, &x1);
+
+    int steps = 2;
+    int step_size = 1;
+
+    while (steps < num_points) {
+        for (int j = 0; j < step_size && steps < num_points; j++) {
+            ec_point_add(&hare, &hare, &G, p);
+            //printf("Step %d: Hare - X: ", steps);
+            //mpz_out_str(stdout, 16, hare.x);
+            //printf(", Y: ");
+            //mpz_out_str(stdout, 16, hare.y);
+            //printf("\n");
+            steps++;
         }
 
-        ec_point_add(&derived_points[i], A, &G, temp.x);
+        for (int j = 0; j < step_size && steps < num_points; j++) {
+            ec_point_add(&tortoise, &tortoise, &G, p);
+            ec_point_add(&hare, &hare, &G, p);
+            //printf("Step %d: Tortoise - X: ", steps);
+            //mpz_out_str(stdout, 16, tortoise.x);
+            //printf(", Y: ");
+            //mpz_out_str(stdout, 16, tortoise.y);
+            //printf("\n");
+            steps++;
 
-        // Mirror the point (x, y) to (x, -y)
+            if (ec_point_equal(&tortoise, &hare)) {
+                printf("Collision detected at step %d\n", steps);
+                fflush(stdout);
+                ec_point_set(&derived_points[0], &tortoise);
+                mpz_clears(increment, a1, a2, b1, b2, NULL);
+                ec_point_clear(&temp);
+                ec_point_clear(&G);
+                ec_point_clear(&x1);
+                ec_point_clear(&x2);
+                ec_point_clear(&tortoise);
+                ec_point_clear(&hare);
+                return;
+            }
+        }
+
+        step_size *= 2;
+    }
+
+    for (int i = 1; i < num_points; i++) {
+        ec_point_add(&x1, &x1, &G, p);
+        ec_point_add(&x2, &x2, &G, p);
+        ec_point_add(&x2, &x2, &G, p);
+        ec_point_set(&derived_points[i], &x1);
+
+        //Invert the point to mirror the (x) symmetry >> (x, y) for (x, -y)
         mpz_set(derived_points[num_points + i].x, derived_points[i].x);
-        mpz_sub(derived_points[num_points + i].y, G.y, derived_points[i].y);
+        mpz_sub(derived_points[num_points + i].y, p, derived_points[i].y);
     }
 
     mpz_clear(increment);
     ec_point_clear(&temp);
     ec_point_clear(&G);
+    ec_point_clear(&x1);
+    ec_point_clear(&x2);
+    mpz_clears(a1, a2, b1, b2, NULL);
 }
 
 void *thread_function(void *arg) {
@@ -195,17 +259,19 @@ void *thread_function(void *arg) {
   mpz_inits(p, Gx, Gy, n, n_half, NULL);
   mpz_set(p, thread_args->p);
 
+  //SECP25651
   mpz_set_str(Gx, "79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798", 16);
   mpz_set_str(Gy, "483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8", 16);
   mpz_set_str(n, "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16);
   mpz_tdiv_q_ui(n_half, n, 2);
 
-  int num_derived_points = 32000;
+  int num_derived_points = 4512;
   ec_point_t derived_points[2 * num_derived_points];
   for (int i = 0; i < 2 * num_derived_points; i++) {
     ec_point_init(&derived_points[i]);
   }
-  generate_derived_points(derived_points, public_key, Gx, Gy, n_half, num_derived_points);
+
+  points(derived_points, public_key, Gx, Gy, n_half, num_derived_points);
 
   ec_point_t temp, result;
   ec_point_init(&temp);
@@ -240,25 +306,49 @@ void *thread_function(void *arg) {
           if (!atomic_load(&found_collision)) {
               atomic_store(&private_key, mpz_get_ui(current_k));
               atomic_store(&found_collision, 1);
-              printf("\rCollision found! Private key: %lu\n", atomic_load(&private_key));
+              mpz_t private_key_mpz;
+              mpz_init_set_ui(private_key_mpz, atomic_load(&private_key));
+
+              printf("\rCollision found! Private key: ");
+              gmp_printf("%ZX\n", private_key_mpz);
               fflush(stdout);
+
+              FILE *file = fopen("KeysFound.txt", "a");
+              if (file == NULL) {
+                  perror("Error opening KeysFound.txt, is null!");
+              } else {
+                  gmp_fprintf(file, "%ZX\n", private_key_mpz);
+                  fclose(file);
+              }
+              mpz_clear(private_key_mpz);
           }
           pthread_mutex_unlock(&collision_mutex);
           break;
       }
-
+      
       for (int i = 0; i < 2 * num_derived_points; i++) {
-          if (ec_point_equal(&result, &derived_points[i])) {
-              pthread_mutex_lock(&collision_mutex);
-              if (!atomic_load(&found_collision)) {
-                  atomic_store(&private_key, mpz_get_ui(current_k));
-                  atomic_store(&found_collision, 1);
-                  printf("\rCollision found with derived point! Private key: %lu\n", atomic_load(&private_key));
-                  fflush(stdout);
-              }
-              pthread_mutex_unlock(&collision_mutex);
-              break;
-          }
+           if (ec_point_equal(&result, &derived_points[i])) {
+                pthread_mutex_lock(&collision_mutex);
+                if (!atomic_load(&found_collision)) {
+                     atomic_store(&private_key, mpz_get_ui(current_k));
+                     atomic_store(&found_collision, 1);
+                     mpz_t private_key_mpz;
+                     mpz_init_set_ui(private_key_mpz, atomic_load(&private_key));
+
+                     printf("\rCollision found with derived point! Private key: ");
+                     gmp_printf("%ZX\n", private_key_mpz);
+                     fflush(stdout);
+
+                     FILE *file = fopen("KeysFound.txt", "a");
+                     if (file == NULL) { perror("Error opening KeysFound.txt, is null!");}
+                     else {
+                     gmp_fprintf(file, "%ZX\n", private_key_mpz);
+                     fclose(file); }
+                     mpz_clear(private_key_mpz);
+                }
+                pthread_mutex_unlock(&collision_mutex);
+                break;
+           }
       }
   }
 
@@ -276,93 +366,96 @@ void *thread_function(void *arg) {
 }
 
 int pollardsrho(int argc, char *argv[]) {
-  if (argc != 3) {
-    fprintf(stderr, "Usage: %s <public key> <key range>\n", argv[0]);
-    return 1;
-  }
-
-  mpz_t p;
-  mpz_init_set_str(p, P_HEX, 16);
-
-  ec_point_t public_key_a;
-  ec_point_init(&public_key_a);
-
-  char *public_key_hex = argv[1];
-  if (strlen(public_key_hex) != 66) {
-    fprintf(stderr, "Invalid public key length. Expected 66 characters (33 bytes in hex).\n");
-    return 1;
-  }
-
-  char prefix[3];
-  char x_hex[65];
-  strncpy(prefix, public_key_hex, 2);
-  prefix[2] = '\0';
-  strncpy(x_hex, public_key_hex + 2, 64);
-  x_hex[64] = '\0';
-
-  mpz_set_str(public_key_a.x, x_hex, 16);
-  if (!y_coordinate_from_compressed(public_key_a.y, public_key_a.x, prefix, p)) {
-    fprintf(stderr, "Failed to calculate y-coordinate from compressed public key.\n");
-    return 1;
-  }
-
-  mpz_t key_range;
-  mpz_init_set_str(key_range, argv[2], 10);
-  mpz_t max_k;
-  mpz_init(max_k);
-  mpz_ui_pow_ui(max_k, 2, mpz_get_ui(key_range));
-
-  pthread_t threads[NUM_THREADS];
-  thread_arg_t thread_args[NUM_THREADS];
-
-  mpz_t range_size, thread_range, start_k;
-  mpz_inits(range_size, thread_range, start_k, NULL);
-  mpz_set(range_size, max_k);
-  mpz_tdiv_q_ui(thread_range, range_size, NUM_THREADS);
-
-  mpz_set_ui(start_k, 0);
-  for (int i = 0; i < NUM_THREADS; i++) {
-    thread_args[i].thread_id = i;
-    thread_args[i].public_key = public_key_a;
-    mpz_init_set(thread_args[i].p, p);
-
-    mpz_init_set(thread_args[i].start_k, start_k);
-    if (i == NUM_THREADS - 1) {
-      mpz_init_set(thread_args[i].end_k, max_k);
-    } else {
-      mpz_init(thread_args[i].end_k);
-      mpz_add(thread_args[i].end_k, start_k, thread_range);
+    if (argc != 3) {
+        fprintf(stderr, "Usage: %s <public key> <key range>\n", argv[0]);
+        return 1;
     }
 
-    if (pthread_create(&threads[i], NULL, thread_function, (void *)&thread_args[i])) {
-      perror("pthread_create");
-      exit(1);
+    if(loading_points) { 
+       printf("\rLoading Points...");
+       fflush(stdout);
+
+       loading_points = false; 
     }
 
-    mpz_add(start_k, start_k, thread_range);
-  }
+    mpz_t p;
+    mpz_init_set_str(p, P_HEX, 16);
 
-  for (int i = 0; i < NUM_THREADS; i++) {
-    if (pthread_join(threads[i], NULL)) {
-      perror("pthread_join");
-      exit(1);
+    ec_point_t public_key_a;
+    ec_point_init(&public_key_a);
+
+    char *public_key_hex = argv[1];
+    if (strlen(public_key_hex) != 66) {
+        fprintf(stderr, "Invalid public key length. Expected 66 characters (33 bytes in hex).\n");
+        return 1;
     }
-    mpz_clear(thread_args[i].p);
-    mpz_clear(thread_args[i].start_k);
-    mpz_clear(thread_args[i].end_k);
-  }
 
-  ec_point_clear(&public_key_a);
-  mpz_clears(p, key_range, max_k, range_size, thread_range, start_k, NULL);
+    char prefix[3];
+    char x_hex[65];
+    strncpy(prefix, public_key_hex, 2);
+    prefix[2] = '\0';
+    strncpy(x_hex, public_key_hex + 2, 64);
+    x_hex[64] = '\0';
 
-  pthread_mutex_lock(&collision_mutex);
-  if (!atomic_load(&found_collision)) {
-    printf("\rNo collision found within the given range.\n");
-    fflush(stdout);
-  }
-  pthread_mutex_unlock(&collision_mutex);
+    mpz_set_str(public_key_a.x, x_hex, 16);
 
-  return 0;
+    if (!y_coordinate_from_compressed(public_key_a.y, public_key_a.x, prefix, p)) {
+        fprintf(stderr, "Failed to calculate y-coordinate from compressed public key.\n");
+        return 1;
+    }
+
+    const int key_range = atoi(argv[2]);
+
+    if (key_range <= 0 || key_range > 256) {
+        fprintf(stderr, "Invalid key_range. Must be between 1 and 256.\n");
+        return 1;
+    }
+
+    mpz_t max_k;
+    mpz_init(max_k);
+    mpz_ui_pow_ui(max_k, 2, key_range);
+
+    pthread_t threads[NUM_THREADS];
+    thread_arg_t thread_args[NUM_THREADS];
+
+    mpz_t thread_range, start_k;
+    mpz_inits(thread_range, start_k, NULL);
+    mpz_tdiv_q_ui(thread_range, max_k, NUM_THREADS);
+    mpz_set_ui(start_k, 0);
+
+    for (int i = 0; i < NUM_THREADS; i++) {
+        thread_args[i].thread_id = i;
+        mpz_init_set(thread_args[i].p, p);
+        thread_args[i].public_key = public_key_a;
+        mpz_init_set_ui(thread_args[i].start_k, mpz_get_ui(start_k));
+        mpz_init(thread_args[i].end_k);
+        mpz_add(thread_args[i].end_k, start_k, thread_range);
+        if (i == NUM_THREADS - 1) { mpz_set(thread_args[i].end_k, max_k); }   
+        if (pthread_create(&threads[i], NULL, thread_function, (void *)&thread_args[i])) { perror("pthread_create");exit(1); }
+        mpz_add_ui(start_k, start_k, mpz_get_ui(thread_range));
+    }
+
+    for (int i = 0; i < NUM_THREADS; i++) {
+        if (pthread_join(threads[i], NULL)) {
+            perror("pthread_join");
+            exit(1);
+        }
+        mpz_clear(thread_args[i].p);
+        mpz_clear(thread_args[i].start_k);
+        mpz_clear(thread_args[i].end_k);
+    }
+    
+    ec_point_clear(&public_key_a);
+    mpz_clears(p, max_k, thread_range, start_k, NULL);
+
+    pthread_mutex_lock(&collision_mutex);
+    if (!atomic_load(&found_collision)) {
+        printf("\rNo collision found within the given range.\n");
+        fflush(stdout);
+    }
+    pthread_mutex_unlock(&collision_mutex);
+
+    return 0;
 }
 
 int main(int argc, char *argv[]) {
