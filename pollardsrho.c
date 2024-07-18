@@ -35,6 +35,8 @@ static bool loading_points = true;
 
 const char *P_HEX = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F";
 
+int key_range;
+
 void ec_point_init(ec_point_t *point) { mpz_inits(point->x, point->y, NULL); }
 
 void ec_point_clear(ec_point_t *point) { mpz_clears(point->x, point->y, NULL); }
@@ -108,7 +110,7 @@ int y_coordinate_from_compressed(mpz_t y, mpz_t x, const char *prefix, mpz_t p) 
   return 1;
 }
 
-void show_progress(uint64_t current_step, mpz_t max_k, struct timespec *last_update_time) {
+void show_progress(uint64_t current_step, struct timespec *last_update_time) {
   struct timespec current_time;
   clock_gettime(CLOCK_MONOTONIC, &current_time);
 
@@ -141,10 +143,7 @@ void show_progress(uint64_t current_step, mpz_t max_k, struct timespec *last_upd
       steps_per_second_unit = "S/s";
     }
 
-    double key_range_double = mpz_get_d(max_k);
-    int bits = (int)round(log2(key_range_double));
-
-    printf("\rSteps: %llu %.2f %s Key Range: %d bits", (unsigned long long)current_step, current_steps_per_sec, steps_per_second_unit, bits);
+    printf("\rSteps: %llu %.2f %s Key Range: %d bits", (unsigned long long)current_step, current_steps_per_sec, steps_per_second_unit, key_range);
     fflush(stdout);
 
     *last_update_time = current_time;
@@ -265,7 +264,16 @@ void *thread_function(void *arg) {
   mpz_set_str(n, "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16);
   mpz_tdiv_q_ui(n_half, n, 2);
 
-  int num_derived_points = 4512;
+  uint_least64_t num_derived_points;
+
+  if (key_range <= 30) { num_derived_points = (uint_least64_t)pow(2, key_range / 2.0); } 
+  else { num_derived_points = 1ULL << key_range; }
+
+  if (num_derived_points > 32000) {
+      num_derived_points = 32000;
+  }
+
+  //Derive the two symmetric parts of secp256k1:
   ec_point_t derived_points[2 * num_derived_points];
   for (int i = 0; i < 2 * num_derived_points; i++) {
     ec_point_init(&derived_points[i]);
@@ -299,7 +307,7 @@ void *thread_function(void *arg) {
       mpz_add_ui(current_k, current_k, 1);
       atomic_fetch_add(&current_step, 1);
 
-      show_progress(current_step, thread_args->end_k, &last_update_time);
+      show_progress(current_step, &last_update_time);
 
       if (ec_point_equal(&result, public_key)) {
           pthread_mutex_lock(&collision_mutex);
@@ -311,6 +319,7 @@ void *thread_function(void *arg) {
 
               printf("\rCollision found! Private key: ");
               gmp_printf("%ZX\n", private_key_mpz);
+              printf("derived points: %d\n", num_derived_points);
               fflush(stdout);
 
               FILE *file = fopen("KeysFound.txt", "a");
@@ -404,7 +413,7 @@ int pollardsrho(int argc, char *argv[]) {
         return 1;
     }
 
-    const int key_range = atoi(argv[2]);
+    key_range = atoi(argv[2]);
 
     if (key_range <= 0 || key_range > 256) {
         fprintf(stderr, "Invalid key_range. Must be between 1 and 256.\n");
