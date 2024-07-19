@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <stdatomic.h>
 
-#define NUM_THREADS 6
+#define NUM_THREADS 8
 
 typedef struct {
   mpz_t x;
