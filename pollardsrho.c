@@ -266,7 +266,7 @@ void *thread_function(void *arg) {
 
   uint_least64_t num_derived_points;
 
-  if (key_range <= 27) { num_derived_points = (uint_least64_t)pow(2, key_range / 2.0); } 
+  if (key_range <= 30) { num_derived_points = (uint_least64_t)pow(2, key_range / 2.0); } 
   else { num_derived_points = 1ULL << key_range; }
 
   if (num_derived_points > 32000) {
