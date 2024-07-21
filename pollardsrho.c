@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <stdatomic.h>
 
-#define NUM_THREADS 1
+#define NUM_THREADS 8
 
 typedef struct {
   mpz_t x;
@@ -186,6 +186,19 @@ void init_random_point(ec_point_t *point, const mpz_t p) {
     mpz_clears(y_squared, beta, temp, NULL);
 }
 
+void ec_point_negate(ec_point_t *result, ec_point_t *point, mpz_t p) {
+    mpz_set(result->x, point->x);
+    mpz_sub(result->y, p, point->y);
+}
+
+void ec_point_sub(ec_point_t *result, ec_point_t *P, ec_point_t *Q, mpz_t p) {
+    ec_point_t negQ;
+    ec_point_init(&negQ);
+    ec_point_negate(&negQ, Q, p);
+    ec_point_add(result, P, &negQ, p);
+    ec_point_clear(&negQ);
+}
+
 void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t p, int num_points) {
     mpz_t increment;
     mpz_init(increment);
@@ -237,12 +250,37 @@ void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t
             }
         }
 
+        if (steps % 3 == 0) {
+            for (int j = 0; j < step_size && steps < num_points; j++) {
+                ec_point_add(&hare, &hare, &G, p);
+                steps++;
+            }
+        } else {
+            for (int j = 0; j < step_size && steps < num_points; j++) {
+                ec_point_add(&tortoise, &tortoise, &G, p);
+                ec_point_sub(&hare, &hare, &G, p);
+                steps++;
+
+                if (ec_point_equal(&tortoise, &hare)) {
+                    printf("Collision detected at step %d\n", steps);
+                    fflush(stdout);
+                    ec_point_set(&derived_points[0], &tortoise);
+                    mpz_clear(increment);
+                    ec_point_clear(&temp);
+                    ec_point_clear(&G);
+                    ec_point_clear(&tortoise);
+                    ec_point_clear(&hare);
+                    return;
+                }
+            }
+        }
+
         step_size *= 2;
     }
 
     for (int i = 2; i < num_points; i++) {
         ec_point_add(&derived_points[i], &derived_points[i - 1], &G, p);
-        //Invert the point to mirror the (x) symmetry >> (x, y) for (x, -y)
+        // Invert the point to mirror the (x) symmetry >> (x, y) for (x, -y)
         mpz_set(derived_points[num_points + i].x, derived_points[i].x);
         mpz_sub(derived_points[num_points + i].y, p, derived_points[i].y);
     }
@@ -314,7 +352,7 @@ void *thread_function(void *arg) {
         show_progress(current_step, &last_update_time);
 
         if (ec_point_equal(&result, public_key)) {
-            pthread_mutex_lock(&collision_mutex);
+            
             if (!atomic_load(&found_collision)) {
                 atomic_store(&private_key, mpz_get_ui(current_k));
                 atomic_store(&found_collision, 1);
@@ -335,13 +373,13 @@ void *thread_function(void *arg) {
                 }
                 mpz_clear(private_key_mpz);
             }
-            pthread_mutex_unlock(&collision_mutex);
+            
             break;
         }
 
         for (int i = 0; i < 2 * num_derived_points; i++) {
             if (ec_point_equal(&result, &derived_points[i])) {
-                pthread_mutex_lock(&collision_mutex);
+                
                 if (!atomic_load(&found_collision)) {
                     atomic_store(&private_key, mpz_get_ui(current_k));
                     atomic_store(&found_collision, 1);
@@ -361,7 +399,6 @@ void *thread_function(void *arg) {
                     }
                     mpz_clear(private_key_mpz);
                 }
-                pthread_mutex_unlock(&collision_mutex);
                 break;
             }
         }
@@ -459,16 +496,14 @@ int pollardsrho(int argc, char *argv[]) {
         mpz_clear(thread_args[i].start_k);
         mpz_clear(thread_args[i].end_k);
     }
-    
+
     ec_point_clear(&public_key_a);
     mpz_clears(p, max_k, thread_range, start_k, NULL);
 
-    pthread_mutex_lock(&collision_mutex);
     if (!atomic_load(&found_collision)) {
         printf("\rNo collision found within the given range.\n");
         fflush(stdout);
     }
-    pthread_mutex_unlock(&collision_mutex);
 
     return 0;
 }
