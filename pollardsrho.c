@@ -29,8 +29,6 @@ atomic_uint_least64_t current_step = 0;
 atomic_uint_least64_t private_key = 0;
 atomic_int found_collision = 0;
 
-pthread_mutex_t collision_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 static bool loading_points = true;
 
 const char *P_HEX = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F";
@@ -40,6 +38,21 @@ int key_range;
 void ec_point_init(ec_point_t *point) { mpz_inits(point->x, point->y, NULL); }
 
 void ec_point_clear(ec_point_t *point) { mpz_clears(point->x, point->y, NULL); }
+
+void ec_point_add(ec_point_t *result, ec_point_t *p1, ec_point_t *p2, mpz_t p);
+
+void ec_point_negate(ec_point_t *result, ec_point_t *point, mpz_t p) {
+    mpz_set(result->x, point->x);
+    mpz_sub(result->y, p, point->y);
+}
+
+void ec_point_sub(ec_point_t *result, ec_point_t *P, ec_point_t *Q, mpz_t p) {
+    ec_point_t negQ;
+    ec_point_init(&negQ);
+    ec_point_negate(&negQ, Q, p);
+    ec_point_add(result, P, &negQ, p);
+    ec_point_clear(&negQ);
+}
 
 void ec_point_add(ec_point_t *result, ec_point_t *p1, ec_point_t *p2, mpz_t p) {
     mpz_t lambda, temp1, temp2;
@@ -51,34 +64,44 @@ void ec_point_add(ec_point_t *result, ec_point_t *p1, ec_point_t *p2, mpz_t p) {
         mpz_set_ui(three, 3);
         mpz_set_ui(two, 2);
 
-        mpz_mul(temp1, p1->x, p1->x);
-        mpz_mul(temp1, temp1, three);
-        mpz_mod(temp1, temp1, p);
+        mpz_mul(temp1, p1->x, p1->x);         // x1^2
+        mpz_mul(temp1, temp1, three);         // 3 * x1^2
+        mpz_add_ui(temp1, temp1, 7);           // 3 * x1^2 + 7
+        mpz_mod(temp1, temp1, p);             // (3 * x1^2 + 7) % p
 
-        mpz_mul(temp2, p1->y, two);
-        mpz_invert(temp2, temp2, p);
-        mpz_mul(lambda, temp1, temp2);
+        mpz_mul(temp2, p1->y, two);           // 2 * y1
+        if (mpz_invert(temp2, temp2, p) == 0) { // Inverse of 2 * y1 mod p
+            mpz_clears(lambda, temp1, temp2, three, two, NULL);
+            return;
+        }
+        mpz_mul(lambda, temp1, temp2);         // lambda = (3 * x1^2 + 7) / (2 * y1)
         mpz_mod(lambda, lambda, p);
 
         mpz_clears(three, two, NULL);
     } else if (mpz_cmp(p1->x, p2->x) == 0) {
+        mpz_set_ui(result->x, 0);
+        mpz_set_ui(result->y, 0);
         mpz_clears(lambda, temp1, temp2, NULL);
         return;
     } else {
-        mpz_sub(temp1, p2->y, p1->y);
-        mpz_sub(temp2, p2->x, p1->x);
-        mpz_invert(temp2, temp2, p);
-        mpz_mul(lambda, temp1, temp2);
+        mpz_sub(temp1, p2->y, p1->y);         // y2 - y1
+        mpz_sub(temp2, p2->x, p1->x);         // x2 - x1
+        if (mpz_invert(temp2, temp2, p) == 0) { // Inverse of x2 - x1 mod p
+            mpz_clears(lambda, temp1, temp2, NULL);
+            return;
+        }
+        mpz_mul(lambda, temp1, temp2);         // lambda = (y2 - y1) / (x2 - x1)
         mpz_mod(lambda, lambda, p);
     }
 
-    mpz_mul(temp1, lambda, lambda);
-    mpz_sub(temp1, temp1, p1->x);
-    mpz_sub(temp1, temp1, p2->x);
+    mpz_mul(temp1, lambda, lambda);          // lambda^2
+    mpz_sub(temp1, temp1, p1->x);            // lambda^2 - x1
+    mpz_sub(temp1, temp1, p2->x);            // lambda^2 - x1 - x2
     mpz_mod(result->x, temp1, p);
-    mpz_sub(temp1, p1->x, result->x);
-    mpz_mul(temp1, lambda, temp1);
-    mpz_sub(temp1, temp1, p1->y);
+
+    mpz_sub(temp1, p1->x, result->x);       // x1 - result->x
+    mpz_mul(temp1, lambda, temp1);          // lambda * (x1 - result->x)
+    mpz_sub(temp1, temp1, p1->y);           // lambda * (x1 - result->x) - y1
     mpz_mod(result->y, temp1, p);
 
     mpz_clears(lambda, temp1, temp2, NULL);
@@ -184,19 +207,6 @@ void init_random_point(ec_point_t *point, const mpz_t p) {
     }
 
     mpz_clears(y_squared, beta, temp, NULL);
-}
-
-void ec_point_negate(ec_point_t *result, ec_point_t *point, mpz_t p) {
-    mpz_set(result->x, point->x);
-    mpz_sub(result->y, p, point->y);
-}
-
-void ec_point_sub(ec_point_t *result, ec_point_t *P, ec_point_t *Q, mpz_t p) {
-    ec_point_t negQ;
-    ec_point_init(&negQ);
-    ec_point_negate(&negQ, Q, p);
-    ec_point_add(result, P, &negQ, p);
-    ec_point_clear(&negQ);
 }
 
 void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t p, int num_points) {
