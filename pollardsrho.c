@@ -64,17 +64,17 @@ void ec_point_add(ec_point_t *result, ec_point_t *p1, ec_point_t *p2, mpz_t p) {
         mpz_set_ui(three, 3);
         mpz_set_ui(two, 2);
 
-        mpz_mul(temp1, p1->x, p1->x);         // x1^2
-        mpz_mul(temp1, temp1, three);         // 3 * x1^2
-        mpz_add_ui(temp1, temp1, 7);           // 3 * x1^2 + 7
-        mpz_mod(temp1, temp1, p);             // (3 * x1^2 + 7) % p
+        mpz_mul(temp1, p1->x, p1->x); // x1^2
+        mpz_mul(temp1, temp1, three); // 3 * x1^2
+        mpz_add_ui(temp1, temp1, 7); // 3 * x1^2 + 7
+        mpz_mod(temp1, temp1, p); // (3 * x1^2 + 7) % p
 
-        mpz_mul(temp2, p1->y, two);           // 2 * y1
+        mpz_mul(temp2, p1->y, two); // 2 * y1
         if (mpz_invert(temp2, temp2, p) == 0) { // Inverse of 2 * y1 mod p
             mpz_clears(lambda, temp1, temp2, three, two, NULL);
             return;
         }
-        mpz_mul(lambda, temp1, temp2);         // lambda = (3 * x1^2 + 7) / (2 * y1)
+        mpz_mul(lambda, temp1, temp2); // lambda = (3 * x1^2 + 7) / (2 * y1)
         mpz_mod(lambda, lambda, p);
 
         mpz_clears(three, two, NULL);
@@ -84,24 +84,24 @@ void ec_point_add(ec_point_t *result, ec_point_t *p1, ec_point_t *p2, mpz_t p) {
         mpz_clears(lambda, temp1, temp2, NULL);
         return;
     } else {
-        mpz_sub(temp1, p2->y, p1->y);         // y2 - y1
-        mpz_sub(temp2, p2->x, p1->x);         // x2 - x1
+        mpz_sub(temp1, p2->y, p1->y); // y2 - y1
+        mpz_sub(temp2, p2->x, p1->x); // x2 - x1
         if (mpz_invert(temp2, temp2, p) == 0) { // Inverse of x2 - x1 mod p
             mpz_clears(lambda, temp1, temp2, NULL);
             return;
         }
-        mpz_mul(lambda, temp1, temp2);         // lambda = (y2 - y1) / (x2 - x1)
+        mpz_mul(lambda, temp1, temp2); // lambda = (y2 - y1) / (x2 - x1)
         mpz_mod(lambda, lambda, p);
     }
 
-    mpz_mul(temp1, lambda, lambda);          // lambda^2
-    mpz_sub(temp1, temp1, p1->x);            // lambda^2 - x1
-    mpz_sub(temp1, temp1, p2->x);            // lambda^2 - x1 - x2
+    mpz_mul(temp1, lambda, lambda); // lambda^2
+    mpz_sub(temp1, temp1, p1->x); // lambda^2 - x1
+    mpz_sub(temp1, temp1, p2->x); // lambda^2 - x1 - x2
     mpz_mod(result->x, temp1, p);
 
-    mpz_sub(temp1, p1->x, result->x);       // x1 - result->x
-    mpz_mul(temp1, lambda, temp1);          // lambda * (x1 - result->x)
-    mpz_sub(temp1, temp1, p1->y);           // lambda * (x1 - result->x) - y1
+    mpz_sub(temp1, p1->x, result->x); // x1 - result->x
+    mpz_mul(temp1, lambda, temp1); // lambda * (x1 - result->x)
+    mpz_sub(temp1, temp1, p1->y); // lambda * (x1 - result->x) - y1
     mpz_mod(result->y, temp1, p);
 
     mpz_clears(lambda, temp1, temp2, NULL);
@@ -214,72 +214,82 @@ void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t
     mpz_init(increment);
     mpz_tdiv_q_ui(increment, p, num_points);
 
-    ec_point_t temp, G;
-    ec_point_init(&temp);
-    ec_point_init(&G);
+    ec_point_t *temp = (ec_point_t *)malloc(sizeof(ec_point_t));
+    ec_point_t *G = (ec_point_t *)malloc(sizeof(ec_point_t));
+    ec_point_init(temp);
+    ec_point_init(G);
 
-    mpz_set(G.x, Gx);
-    mpz_set(G.y, Gy);
+    mpz_set(G->x, Gx);
+    mpz_set(G->y, Gy);
 
-    ec_point_t tortoise, hare;
-    ec_point_init(&tortoise);
-    ec_point_init(&hare);
+    ec_point_t *tortoise = (ec_point_t *)malloc(sizeof(ec_point_t));
+    ec_point_t *hare = (ec_point_t *)malloc(sizeof(ec_point_t));
+    ec_point_init(tortoise);
+    ec_point_init(hare);
 
     do {
-        init_random_point(&tortoise, p);
-        init_random_point(&hare, p);
-    } while (ec_point_equal(&tortoise, &hare));
+        init_random_point(tortoise, p);
+        init_random_point(hare, p);
+    } while (ec_point_equal(tortoise, hare));
 
-    ec_point_set(&derived_points[0], &tortoise);
-    ec_point_set(&derived_points[1], &hare);
+    ec_point_set(derived_points, tortoise);
+    ec_point_set(derived_points + 1, hare);
 
     int steps = 2;
     int step_size = 1;
 
     while (steps < num_points) {
         for (int j = 0; j < step_size && steps < num_points; j++) {
-            ec_point_add(&hare, &hare, &G, p);
+            ec_point_add(hare, hare, G, p);
             steps++;
         }
 
         for (int j = 0; j < step_size && steps < num_points; j++) {
-            ec_point_add(&tortoise, &tortoise, &G, p);
-            ec_point_add(&hare, &hare, &G, p);
+            ec_point_add(tortoise, tortoise, G, p);
+            ec_point_add(hare, hare, G, p);
             steps++;
 
-            if (ec_point_equal(&tortoise, &hare)) {
+            if (ec_point_equal(tortoise, hare)) {
                 printf("Collision detected at step %d\n", steps);
                 fflush(stdout);
-                ec_point_set(&derived_points[0], &tortoise);
+                ec_point_set(derived_points, tortoise);
                 mpz_clear(increment);
-                ec_point_clear(&temp);
-                ec_point_clear(&G);
-                ec_point_clear(&tortoise);
-                ec_point_clear(&hare);
+                ec_point_clear(temp);
+                ec_point_clear(G);
+                ec_point_clear(tortoise);
+                ec_point_clear(hare);
+                free(temp);
+                free(G);
+                free(tortoise);
+                free(hare);
                 return;
             }
         }
 
         if (steps % 3 == 0) {
             for (int j = 0; j < step_size && steps < num_points; j++) {
-                ec_point_add(&hare, &hare, &G, p);
+                ec_point_add(hare, hare, G, p);
                 steps++;
             }
         } else {
             for (int j = 0; j < step_size && steps < num_points; j++) {
-                ec_point_add(&tortoise, &tortoise, &G, p);
-                ec_point_sub(&hare, &hare, &G, p);
+                ec_point_add(tortoise, tortoise, G, p);
+                ec_point_sub(hare, hare, G, p);
                 steps++;
 
-                if (ec_point_equal(&tortoise, &hare)) {
+                if (ec_point_equal(tortoise, hare)) {
                     printf("Collision detected at step %d\n", steps);
                     fflush(stdout);
-                    ec_point_set(&derived_points[0], &tortoise);
+                    ec_point_set(derived_points, tortoise);
                     mpz_clear(increment);
-                    ec_point_clear(&temp);
-                    ec_point_clear(&G);
-                    ec_point_clear(&tortoise);
-                    ec_point_clear(&hare);
+                    ec_point_clear(temp);
+                    ec_point_clear(G);
+                    ec_point_clear(tortoise);
+                    ec_point_clear(hare);
+                    free(temp);
+                    free(G);
+                    free(tortoise);
+                    free(hare);
                     return;
                 }
             }
@@ -289,17 +299,20 @@ void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t
     }
 
     for (int i = 2; i < num_points; i++) {
-        ec_point_add(&derived_points[i], &derived_points[i - 1], &G, p);
-        // Invert the point to mirror the (x) symmetry >> (x, y) for (x, -y)
-        mpz_set(derived_points[num_points + i].x, derived_points[i].x);
-        mpz_sub(derived_points[num_points + i].y, p, derived_points[i].y);
+        ec_point_add(derived_points + i, derived_points + i - 1, G, p);
+        mpz_set((derived_points + num_points + i)->x, (derived_points + i)->x);
+        mpz_sub((derived_points + num_points + i)->y, p, (derived_points + i)->y);
     }
 
     mpz_clear(increment);
-    ec_point_clear(&temp);
-    ec_point_clear(&G);
-    ec_point_clear(&tortoise);
-    ec_point_clear(&hare);
+    ec_point_clear(temp);
+    ec_point_clear(G);
+    ec_point_clear(tortoise);
+    ec_point_clear(hare);
+    free(temp);
+    free(G);
+    free(tortoise);
+    free(hare);
 }
 
 void *thread_function(void *arg) {
@@ -316,15 +329,17 @@ void *thread_function(void *arg) {
 
     uint_least64_t num_derived_points;
 
+    //[Adjust Derived Points Automatically]
     if (key_range <= 30) {
         num_derived_points = (uint_least64_t)pow(2, key_range / 2.0);
     } else {
         num_derived_points = 1ULL << key_range;
     }
 
-    if (num_derived_points > 32000) {
-        num_derived_points = 32000;
-    }
+    //[LIMIT_FOR_MAX_DERIVED_POINTS]
+    //if (num_derived_points > 32000) {
+    //    num_derived_points = 32000;
+    //}
 
     ec_point_t derived_points[2 * num_derived_points];
     for (int i = 0; i < 2 * num_derived_points; i++) {
