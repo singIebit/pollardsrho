@@ -166,7 +166,7 @@ void show_progress(uint64_t current_step, struct timespec *last_update_time) {
       steps_per_second_unit = "S/s";
     }
 
-    printf("\rSteps: %llu %.2f %s Key Range: %d bits", (unsigned long long)current_step, current_steps_per_sec, steps_per_second_unit, key_range);
+    printf("\rSteps: %llu %.2f %s Key Range: %d bits.", (unsigned long long)current_step, current_steps_per_sec, steps_per_second_unit, key_range);
     fflush(stdout);
 
     *last_update_time = current_time;
