@@ -214,82 +214,72 @@ void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t
     mpz_init(increment);
     mpz_tdiv_q_ui(increment, p, num_points);
 
-    ec_point_t *temp = (ec_point_t *)malloc(sizeof(ec_point_t));
-    ec_point_t *G = (ec_point_t *)malloc(sizeof(ec_point_t));
-    ec_point_init(temp);
-    ec_point_init(G);
+    ec_point_t temp, G;
+    ec_point_init(&temp);
+    ec_point_init(&G);
 
-    mpz_set(G->x, Gx);
-    mpz_set(G->y, Gy);
+    mpz_set(G.x, Gx);
+    mpz_set(G.y, Gy);
 
-    ec_point_t *tortoise = (ec_point_t *)malloc(sizeof(ec_point_t));
-    ec_point_t *hare = (ec_point_t *)malloc(sizeof(ec_point_t));
-    ec_point_init(tortoise);
-    ec_point_init(hare);
+    ec_point_t tortoise, hare;
+    ec_point_init(&tortoise);
+    ec_point_init(&hare);
 
     do {
-        init_random_point(tortoise, p);
-        init_random_point(hare, p);
-    } while (ec_point_equal(tortoise, hare));
+        init_random_point(&tortoise, p);
+        init_random_point(&hare, p);
+    } while (ec_point_equal(&tortoise, &hare));
 
-    ec_point_set(derived_points, tortoise);
-    ec_point_set(derived_points + 1, hare);
+    ec_point_set(&derived_points[0], &tortoise);
+    ec_point_set(&derived_points[1], &hare);
 
     int steps = 2;
     int step_size = 1;
 
     while (steps < num_points) {
         for (int j = 0; j < step_size && steps < num_points; j++) {
-            ec_point_add(hare, hare, G, p);
+            ec_point_add(&hare, &hare, &G, p);
             steps++;
         }
 
         for (int j = 0; j < step_size && steps < num_points; j++) {
-            ec_point_add(tortoise, tortoise, G, p);
-            ec_point_add(hare, hare, G, p);
+            ec_point_add(&tortoise, &tortoise, &G, p);
+            ec_point_add(&hare, &hare, &G, p);
             steps++;
 
-            if (ec_point_equal(tortoise, hare)) {
+            if (ec_point_equal(&tortoise, &hare)) {
                 printf("Collision detected at step %d\n", steps);
                 fflush(stdout);
-                ec_point_set(derived_points, tortoise);
+                ec_point_set(&derived_points[0], &tortoise);
                 mpz_clear(increment);
-                ec_point_clear(temp);
-                ec_point_clear(G);
-                ec_point_clear(tortoise);
-                ec_point_clear(hare);
-                free(temp);
-                free(G);
-                free(tortoise);
-                free(hare);
+                ec_point_clear(&temp);
+                ec_point_clear(&G);
+                ec_point_clear(&tortoise);
+                ec_point_clear(&hare);
                 return;
             }
         }
 
         if (steps % 3 == 0) {
             for (int j = 0; j < step_size && steps < num_points; j++) {
-                ec_point_add(hare, hare, G, p);
+                ec_point_add(&hare, &hare, &G, p);
                 steps++;
             }
         } else {
             for (int j = 0; j < step_size && steps < num_points; j++) {
-                ec_point_add(tortoise, tortoise, G, p);
-                ec_point_sub(hare, hare, G, p);
+                ec_point_add(&tortoise, &tortoise, &G, p);
+                ec_point_sub(&hare, &hare, &G, p);
                 steps++;
 
-                if (ec_point_equal(tortoise, hare)) {
+                if (ec_point_equal(&tortoise, &hare)) {
                     printf("Collision detected at step %d\n", steps);
                     fflush(stdout);
-                    ec_point_set(derived_points, tortoise);
+                    ec_point_set(&derived_points[0], &tortoise);
                     mpz_clear(increment);
-                    ec_point_clear(temp);
-                    ec_point_clear(G);
-                    ec_point_clear(tortoise);
-                    ec_point_clear(hare);
-                    free(temp);
-                    free(G);
-                    free(tortoise);
-                    free(hare);
+                    ec_point_clear(&temp);
+                    ec_point_clear(&G);
+                    ec_point_clear(&tortoise);
+                    ec_point_clear(&hare);
                     return;
                 }
             }
@@ -299,23 +289,19 @@ void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t
     }
 
     for (int i = 2; i < num_points; i++) {
-        ec_point_add(derived_points + i, derived_points + i - 1, G, p);
-        mpz_set((derived_points + num_points + i)->x, (derived_points + i)->x);
-        mpz_sub((derived_points + num_points + i)->y, p, (derived_points + i)->y);
+        ec_point_add(&derived_points[i], &derived_points[i - 1], &G, p);
+        mpz_set(derived_points[num_points + i].x, derived_points[i].x);
+        mpz_sub(derived_points[num_points + i].y, p, derived_points[i].y);
     }
 
     mpz_clear(increment);
-    ec_point_clear(temp);
-    ec_point_clear(G);
-    ec_point_clear(tortoise);
-    ec_point_clear(hare);
-    free(temp);
-    free(G);
-    free(tortoise);
-    free(hare);
+    ec_point_clear(&temp);
+    ec_point_clear(&G);
+    ec_point_clear(&tortoise);
+    ec_point_clear(&hare);
 }
 
-void *thread_function(void *arg) {
+void *thread(void *arg) {
     thread_arg_t *thread_args = (thread_arg_t *)arg;
     ec_point_t *public_key = &thread_args->public_key;
     mpz_t p, Gx, Gy, n, n_half;
@@ -327,19 +313,7 @@ void *thread_function(void *arg) {
     mpz_set_str(n, "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16);
     mpz_tdiv_q_ui(n_half, n, 2);
 
-    uint_least64_t num_derived_points;
-
-    //[Adjust Derived Points Automatically]
-    if (key_range <= 30) {
-        num_derived_points = (uint_least64_t)pow(2, key_range / 2.0);
-    } else {
-        num_derived_points = 1ULL << key_range;
-    }
-
-    //[LIMIT_FOR_MAX_DERIVED_POINTS]
-    //if (num_derived_points > 32000) {
-    //    num_derived_points = 32000;
-    //}
+    uint_least64_t num_derived_points = 32500;//[MAX 8 GB >> 130000]
 
     ec_point_t derived_points[2 * num_derived_points];
     for (int i = 0; i < 2 * num_derived_points; i++) {
@@ -377,7 +351,6 @@ void *thread_function(void *arg) {
         show_progress(current_step, &last_update_time);
 
         if (ec_point_equal(&result, public_key)) {
-            
             if (!atomic_load(&found_collision)) {
                 atomic_store(&private_key, mpz_get_ui(current_k));
                 atomic_store(&found_collision, 1);
@@ -386,7 +359,7 @@ void *thread_function(void *arg) {
 
                 printf("\rCollision found! Private key: ");
                 gmp_printf("%ZX\n", private_key_mpz);
-                printf("derived points: %d\n", num_derived_points);
+                printf("derived points: %llu\n", num_derived_points);
                 fflush(stdout);
 
                 FILE *file = fopen("KeysFound.txt", "a");
@@ -398,13 +371,11 @@ void *thread_function(void *arg) {
                 }
                 mpz_clear(private_key_mpz);
             }
-            
             break;
         }
 
         for (int i = 0; i < 2 * num_derived_points; i++) {
             if (ec_point_equal(&result, &derived_points[i])) {
-                
                 if (!atomic_load(&found_collision)) {
                     atomic_store(&private_key, mpz_get_ui(current_k));
                     atomic_store(&found_collision, 1);
@@ -508,7 +479,7 @@ int pollardsrho(int argc, char *argv[]) {
         mpz_init(thread_args[i].end_k);
         mpz_add(thread_args[i].end_k, start_k, thread_range);
         if (i == NUM_THREADS - 1) { mpz_set(thread_args[i].end_k, max_k); }   
-        if (pthread_create(&threads[i], NULL, thread_function, (void *)&thread_args[i])) { perror("pthread_create");exit(1); }
+        if (pthread_create(&threads[i], NULL, thread, (void *)&thread_args[i])) { perror("pthread_create");exit(1); }
         mpz_add_ui(start_k, start_k, mpz_get_ui(thread_range));
     }
 
