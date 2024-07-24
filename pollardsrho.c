@@ -313,7 +313,7 @@ void *thread(void *arg) {
     mpz_set_str(n, "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16);
     mpz_tdiv_q_ui(n_half, n, 2);
 
-    uint_least64_t num_derived_points = 32500;//[MAX 8 GB >> 130000]
+    uint_least64_t num_derived_points = 32500;//[MAX POINTS >> 130000]
 
     ec_point_t derived_points[2 * num_derived_points];
     for (int i = 0; i < 2 * num_derived_points; i++) {
