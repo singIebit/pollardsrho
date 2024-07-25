@@ -182,7 +182,7 @@ void ec_point_set(ec_point_t *dest, ec_point_t *src) {
 void random_mpz(mpz_t result, const mpz_t max) {
     gmp_randstate_t state;
     gmp_randinit_default(state);
-    gmp_randseed_ui(state, time(NULL) + pthread_self());
+    gmp_randseed_ui(state, time(NULL) + getpid());
     mpz_urandomm(result, state, max);
     gmp_randclear(state);
 }
