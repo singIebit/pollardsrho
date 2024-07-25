@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <stdatomic.h>
 
-#define NUM_THREADS 4
+#define NUM_THREADS 8
 
 typedef struct {
   mpz_t x;
@@ -34,6 +34,24 @@ static bool loading_points = true;
 const char *P_HEX = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F";
 
 int key_range;
+
+gmp_randstate_t global_state;
+bool global_state_initialized = false;
+
+void init_random_state() {
+    if (!global_state_initialized) {
+        gmp_randinit_default(global_state);
+        gmp_randseed_ui(global_state, (unsigned long)time(NULL) + getpid());
+        global_state_initialized = true;
+    }
+}
+
+void clear_random_state() {
+    if (global_state_initialized) {
+        gmp_randclear(global_state);
+        global_state_initialized = false;
+    }
+}
 
 void ec_point_init(ec_point_t *point) { mpz_inits(point->x, point->y, NULL); }
 
@@ -180,19 +198,19 @@ void ec_point_set(ec_point_t *dest, ec_point_t *src) {
 }
 
 void random_mpz(mpz_t result, const mpz_t max) {
-    gmp_randstate_t state;
-    gmp_randinit_default(state);
-    gmp_randseed_ui(state, time(NULL) + getpid());
-    mpz_urandomm(result, state, max);
-    gmp_randclear(state);
+    if (!global_state_initialized) {
+        init_random_state();
+    }
+    mpz_urandomm(result, global_state, max);
 }
 
 void init_random_point(ec_point_t *point, const mpz_t p) {
-    random_mpz(point->x, p);
-    mpz_t y_squared, beta, temp;
-    mpz_inits(y_squared, beta, temp, NULL);
+    mpz_t x, y_squared, beta, temp, y;
+    mpz_inits(x, y_squared, beta, temp, y, NULL);
 
-    mpz_powm_ui(y_squared, point->x, 3, p);
+    random_mpz(x, p);
+
+    mpz_powm_ui(y_squared, x, 3, p);
     mpz_add_ui(y_squared, y_squared, 7);
     mpz_mod(y_squared, y_squared, p);
 
@@ -201,12 +219,29 @@ void init_random_point(ec_point_t *point, const mpz_t p) {
     mpz_powm(beta, y_squared, temp, p);
 
     if (mpz_tstbit(beta, 0) == 0) {
-        mpz_set(point->y, beta);
+        mpz_set(y, beta);
     } else {
-        mpz_sub(point->y, p, beta);
+        mpz_sub(y, p, beta);
     }
 
-    mpz_clears(y_squared, beta, temp, NULL);
+    mpz_t y_check, lhs, rhs;
+    mpz_inits(y_check, lhs, rhs, NULL);
+
+    mpz_powm_ui(lhs, x, 3, p);
+    mpz_add_ui(lhs, lhs, 7);
+    mpz_mod(lhs, lhs, p);
+
+    mpz_powm_ui(rhs, y, 2, p);
+
+    if (mpz_cmp(lhs, rhs) != 0) {
+        init_random_point(point, p);
+    } else {
+        
+        mpz_set(point->x, x);
+        mpz_set(point->y, y);
+    }
+
+    mpz_clears(x, y_squared, beta, temp, y, y_check, lhs, rhs, NULL);
 }
 
 void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t p, int num_points) {
@@ -313,7 +348,7 @@ void *thread(void *arg) {
     mpz_set_str(n, "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16);
     mpz_tdiv_q_ui(n_half, n, 2);
 
-    uint_least64_t num_derived_points = 32500;//[MAX POINTS >> 130000]
+    uint_least64_t num_derived_points = 2500000;
 
     ec_point_t derived_points[2 * num_derived_points];
     for (int i = 0; i < 2 * num_derived_points; i++) {
