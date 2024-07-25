@@ -30,13 +30,13 @@ atomic_uint_least64_t private_key = 0;
 atomic_int found_collision = 0;
 
 static bool loading_points = true;
+bool global_state_initialized = false;
 
 const char *P_HEX = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F";
 
 int key_range;
 
 gmp_randstate_t global_state;
-bool global_state_initialized = false;
 
 void init_random_state() {
     if (!global_state_initialized) {
@@ -350,7 +350,11 @@ void *thread(void *arg) {
 
     uint_least64_t num_derived_points = 2500000;
 
-    ec_point_t derived_points[2 * num_derived_points];
+    ec_point_t *derived_points = malloc(2 * num_derived_points * sizeof(ec_point_t));
+    if (derived_points == NULL) {
+        perror("Error allocating memory for derived_points");
+        exit(1);
+    }
     for (int i = 0; i < 2 * num_derived_points; i++) {
         ec_point_init(&derived_points[i]);
     }
@@ -443,6 +447,7 @@ void *thread(void *arg) {
     for (int i = 0; i < 2 * num_derived_points; i++) {
         ec_point_clear(&derived_points[i]);
     }
+    free(derived_points);
     mpz_clears(p, Gx, Gy, n, NULL);
 
     return NULL;
