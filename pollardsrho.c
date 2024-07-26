@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <stdatomic.h>
 
-#define NUM_THREADS 1
+#define NUM_THREADS 8
 
 typedef struct {
   mpz_t x;
@@ -236,7 +236,7 @@ void init_random_point(ec_point_t *point, const mpz_t p) {
     if (mpz_cmp(lhs, rhs) != 0) {
         init_random_point(point, p);
     } else {
-        
+
         mpz_set(point->x, x);
         mpz_set(point->y, y);
     }
@@ -291,7 +291,7 @@ void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t
                 ec_point_clear(&G);
                 ec_point_clear(&tortoise);
                 ec_point_clear(&hare);
-                return;
+                break;
             }
         }
 
@@ -315,7 +315,7 @@ void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t
                     ec_point_clear(&G);
                     ec_point_clear(&tortoise);
                     ec_point_clear(&hare);
-                    return;
+                    break;
                 }
             }
         }
