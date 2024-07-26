@@ -234,9 +234,10 @@ void init_random_point(ec_point_t *point, const mpz_t p) {
     mpz_powm_ui(rhs, y, 2, p);
 
     if (mpz_cmp(lhs, rhs) != 0) {
+        mpz_clears(x, y_squared, beta, temp, y, y_check, lhs, rhs, NULL);
         init_random_point(point, p);
+        return;
     } else {
-
         mpz_set(point->x, x);
         mpz_set(point->y, y);
     }
