@@ -205,25 +205,26 @@ void random_mpz(mpz_t result, const mpz_t max) {
 }
 
 void init_random_point(ec_point_t *point, const mpz_t p) {
-    random_mpz(point->x, p);
-    mpz_t y_squared, beta, temp;
-    mpz_inits(y_squared, beta, temp, NULL);
+    mpz_t y_squared, beta;
+    mpz_inits(y_squared, beta, NULL);
 
-    mpz_powm_ui(y_squared, point->x, 3, p);
+    // y^2 = x^3 + 7 (mod p)
+    mpz_powm_ui(y_squared, x, 3, p);
     mpz_add_ui(y_squared, y_squared, 7);
     mpz_mod(y_squared, y_squared, p);
 
-    mpz_add_ui(temp, p, 1);
-    mpz_fdiv_q_ui(temp, temp, 4);
-    mpz_powm(beta, y_squared, temp, p);
+    // Calculate the square root of y_squared (mod p)
+    mpz_powm_ui(beta, y_squared, (mpz_get_ui(p) + 1) / 4, p);
 
-    if (mpz_tstbit(beta, 0) == 0) {
-        mpz_set(point->y, beta);
+    // Select the correct root based on the prefix
+    if ((mpz_tstbit(beta, 0) == 0 && prefix[1] == '2') || (mpz_tstbit(beta, 0) == 1 && prefix[1] == '3')) {
+        mpz_set(y, beta);
     } else {
-        mpz_sub(point->y, p, beta);
+        mpz_sub(y, p, beta);
     }
 
-    mpz_clears(y_squared, beta, temp, NULL);
+    mpz_clears(y_squared, beta, NULL);
+    return 1;
 }
 
 void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t p, int num_points) {
