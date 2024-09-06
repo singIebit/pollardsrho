@@ -205,12 +205,11 @@ void random_mpz(mpz_t result, const mpz_t max) {
 }
 
 void init_random_point(ec_point_t *point, const mpz_t p) {
-    mpz_t x, y_squared, beta, temp, y;
-    mpz_inits(x, y_squared, beta, temp, y, NULL);
+    random_mpz(point->x, p);
+    mpz_t y_squared, beta, temp;
+    mpz_inits(y_squared, beta, temp, NULL);
 
-    random_mpz(x, p);
-
-    mpz_powm_ui(y_squared, x, 3, p);
+    mpz_powm_ui(y_squared, point->x, 3, p);
     mpz_add_ui(y_squared, y_squared, 7);
     mpz_mod(y_squared, y_squared, p);
 
@@ -219,30 +218,12 @@ void init_random_point(ec_point_t *point, const mpz_t p) {
     mpz_powm(beta, y_squared, temp, p);
 
     if (mpz_tstbit(beta, 0) == 0) {
-        mpz_set(y, beta);
+        mpz_set(point->y, beta);
     } else {
-        mpz_sub(y, p, beta);
+        mpz_sub(point->y, p, beta);
     }
 
-    mpz_t y_check, lhs, rhs;
-    mpz_inits(y_check, lhs, rhs, NULL);
-
-    mpz_powm_ui(lhs, x, 3, p);
-    mpz_add_ui(lhs, lhs, 7);
-    mpz_mod(lhs, lhs, p);
-
-    mpz_powm_ui(rhs, y, 2, p);
-
-    if (mpz_cmp(lhs, rhs) != 0) {
-        mpz_clears(x, y_squared, beta, temp, y, y_check, lhs, rhs, NULL);
-        init_random_point(point, p);
-        return;
-    } else {
-        mpz_set(point->x, x);
-        mpz_set(point->y, y);
-    }
-
-    mpz_clears(x, y_squared, beta, temp, y, y_check, lhs, rhs, NULL);
+    mpz_clears(y_squared, beta, temp, NULL);
 }
 
 void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t p, int num_points) {
