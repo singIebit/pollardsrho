@@ -40,19 +40,19 @@ The expected time complexity of Pollard's Rho algorithm for elliptic curves is <
 
 4. Run the program:
     ```bash
-    ./pollardsrho <public key> <key range>
+    ./pollardsrho <public key> <key range> <derived points>
     ```
 
-    Replace `<public key>` with the point \( G \) on the secp256k1 curve multiplied by your private key value, and `<key range>` with the size of the search interval for \( k \).
+    Replace `<public key>` with the point \( G \) on the secp256k1 curve multiplied by your private key value, and `<key range>` with the size of the search interval for \( k \), and the number of `<derived points>` in the curve.
 
     Example usage:
     ```bash
-    ./pollardsrho 03633cbe3ec02b9401c5effa144c5b4d22f87940259634858fc7e59b1c09937852 130
+    ./pollardsrho 03633cbe3ec02b9401c5effa144c5b4d22f87940259634858fc7e59b1c09937852 130 1000000
     ```
 
 ## Commands
 
-- `./pollardsrho <public key> <key range>`: Starts the search for the private key corresponding to the given public key within the specified range.
+- `./pollardsrho <public key> <key range> <derived points>`: Starts the search for the private key corresponding to the given public key within the specified range and derived points.
 
 ## Technologies Used
 
