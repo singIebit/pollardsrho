@@ -330,7 +330,7 @@ void *thread(void *arg) {
     mpz_set_str(n, "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16);
     mpz_tdiv_q_ui(n_half, n, 2);
 
-    uint_least64_t num_derived_points = 100000;
+    uint_least64_t num_derived_points = 10000;
 
     ec_point_t *derived_points = malloc(2 * num_derived_points * sizeof(ec_point_t));
     if (derived_points == NULL) {
