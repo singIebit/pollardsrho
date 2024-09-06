@@ -35,6 +35,7 @@ bool global_state_initialized = false;
 const char *P_HEX = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F";
 
 int key_range;
+uint_least64_t num_derived_points;
 
 gmp_randstate_t global_state;
 
@@ -208,7 +209,7 @@ void init_random_point(ec_point_t *point, const mpz_t p) {
     mpz_t y_squared, beta, x, y;
     mpz_inits(y_squared, beta, x, y, NULL);
 
-    // Gera um valor aleatório para x
+    // Random for x
     random_mpz(x, p);
 
     // y^2 = x^3 + 7 (mod p)
@@ -216,12 +217,10 @@ void init_random_point(ec_point_t *point, const mpz_t p) {
     mpz_add_ui(y_squared, y_squared, 7);
     mpz_mod(y_squared, y_squared, p);
 
-    // Calcular a raiz quadrada de y_squared (mod p)
     mpz_powm_ui(beta, y_squared, (mpz_get_ui(p) + 1) / 4, p);
 
-    // Define o ponto gerado
     mpz_set(point->x, x);
-    mpz_set(point->y, beta);  // Assume-se que a escolha do sinal não é necessária aqui
+    mpz_set(point->y, beta);
 
     mpz_clears(y_squared, beta, x, y, NULL);
 }
@@ -273,17 +272,11 @@ void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t
                 ec_point_clear(&G);
                 ec_point_clear(&tortoise);
                 ec_point_clear(&hare);
-                break;
+                return;
             }
         }
 
-        if (steps % 3 == 0) {
-            for (int j = 0; j < step_size && steps < num_points; j++) {
-                ec_point_add(&hare, &hare, &G, p);
-                steps++;
-            }
-        } else {
-            for (int j = 0; j < step_size && steps < num_points; j++) {
+        for (int j = 0; j < step_size && steps < num_points; j++) {
                 ec_point_add(&tortoise, &tortoise, &G, p);
                 ec_point_sub(&hare, &hare, &G, p);
                 steps++;
@@ -297,9 +290,8 @@ void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t
                     ec_point_clear(&G);
                     ec_point_clear(&tortoise);
                     ec_point_clear(&hare);
-                    break;
+                    return;
                 }
-            }
         }
 
         step_size *= 2;
@@ -330,13 +322,8 @@ void *thread(void *arg) {
     mpz_set_str(n, "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16);
     mpz_tdiv_q_ui(n_half, n, 2);
 
-    uint_least64_t num_derived_points = 100;
-
     ec_point_t *derived_points = malloc(2 * num_derived_points * sizeof(ec_point_t));
-    if (derived_points == NULL) {
-        perror("Error allocating memory for derived_points");
-        exit(1);
-    }
+
     for (int i = 0; i < 2 * num_derived_points; i++) {
         ec_point_init(&derived_points[i]);
     }
@@ -436,8 +423,8 @@ void *thread(void *arg) {
 }
 
 int pollardsrho(int argc, char *argv[]) {
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <public key> <key range>\n", argv[0]);
+    if (argc != 4) {
+        fprintf(stderr, "Usage: %s <public key> <key range> <derived points>\n", argv[0]);
         return 1;
     }
 
@@ -455,6 +442,7 @@ int pollardsrho(int argc, char *argv[]) {
     ec_point_init(&public_key_a);
 
     char *public_key_hex = argv[1];
+
     if (strlen(public_key_hex) != 66) {
         fprintf(stderr, "Invalid public key length. Expected 66 characters (33 bytes in hex).\n");
         return 1;
@@ -478,6 +466,13 @@ int pollardsrho(int argc, char *argv[]) {
 
     if (key_range <= 0 || key_range > 256) {
         fprintf(stderr, "Invalid key_range. Must be between 1 and 256.\n");
+        return 1;
+    }
+
+    num_derived_points = atoi(argv[3]);
+
+    if (num_derived_points <= 0) {
+        fprintf(stderr, "Invalid num_derived_points. Must be greater than 0.\n");
         return 1;
     }
 
