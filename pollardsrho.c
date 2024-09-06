@@ -205,26 +205,25 @@ void random_mpz(mpz_t result, const mpz_t max) {
 }
 
 void init_random_point(ec_point_t *point, const mpz_t p) {
-    mpz_t y_squared, beta;
-    mpz_inits(y_squared, beta, NULL);
+    mpz_t y_squared, beta, x, y;
+    mpz_inits(y_squared, beta, x, y, NULL);
+
+    // Gera um valor aleatório para x
+    random_mpz(x, p);
 
     // y^2 = x^3 + 7 (mod p)
     mpz_powm_ui(y_squared, x, 3, p);
     mpz_add_ui(y_squared, y_squared, 7);
     mpz_mod(y_squared, y_squared, p);
 
-    // Calculate the square root of y_squared (mod p)
+    // Calcular a raiz quadrada de y_squared (mod p)
     mpz_powm_ui(beta, y_squared, (mpz_get_ui(p) + 1) / 4, p);
 
-    // Select the correct root based on the prefix
-    if ((mpz_tstbit(beta, 0) == 0 && prefix[1] == '2') || (mpz_tstbit(beta, 0) == 1 && prefix[1] == '3')) {
-        mpz_set(y, beta);
-    } else {
-        mpz_sub(y, p, beta);
-    }
+    // Define o ponto gerado
+    mpz_set(point->x, x);
+    mpz_set(point->y, beta);  // Assume-se que a escolha do sinal não é necessária aqui
 
-    mpz_clears(y_squared, beta, NULL);
-    return 1;
+    mpz_clears(y_squared, beta, x, y, NULL);
 }
 
 void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t p, int num_points) {
