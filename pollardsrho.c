@@ -368,7 +368,7 @@ void *thread(void *arg) {
 
                 printf("\rCollision found! Private key: ");
                 gmp_printf("%ZX\n", private_key_mpz);
-                printf("derived points: %" PRIuLEAST64 "\n", num_derived_points); // Corrigido aqui
+                printf("derived points: %" PRIuLEAST64 "\n", num_derived_points);
                 fflush(stdout);
 
                 FILE *file = fopen("KeysFound.txt", "a");
