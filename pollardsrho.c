@@ -312,11 +312,16 @@ void points(ec_point_t *derived_points, ec_point_t *A, mpz_t Gx, mpz_t Gy, mpz_t
 }
 
 void *thread(void *arg) {
+
     thread_arg_t *thread_args = (thread_arg_t *)arg;
     ec_point_t *public_key = &thread_args->public_key;
-    mpz_t p, Gx, Gy, n, n_half;
-    mpz_inits(p, Gx, Gy, n, n_half, NULL);
+    mpz_t p, Gx, Gy, n, n_half, start_k, end_k;
+    mpz_inits(p, Gx, Gy, n, n_half, start_k, end_k, NULL);
     mpz_set(p, thread_args->p);
+
+    mpz_ui_pow_ui(start_k, 2, key_range - 1);  // start_k = 2^(key_range - 1)
+    mpz_ui_pow_ui(end_k, 2, key_range);        // end_k = 2^key_range
+    mpz_sub_ui(end_k, end_k, 1);               // end_k = 2^key_range - 1
 
     mpz_set_str(Gx, "79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798", 16);
     mpz_set_str(Gy, "483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8", 16);
@@ -324,28 +329,23 @@ void *thread(void *arg) {
     mpz_tdiv_q_ui(n_half, n, 2);
 
     ec_point_t *derived_points = malloc(2 * num_derived_points * sizeof(ec_point_t));
-
     for (int i = 0; i < 2 * num_derived_points; i++) {
         ec_point_init(&derived_points[i]);
     }
-
     points(derived_points, public_key, Gx, Gy, n_half, num_derived_points);
 
     ec_point_t temp, result;
     ec_point_init(&temp);
     ec_point_init(&result);
-
     mpz_set(temp.x, public_key->x);
     mpz_set(temp.y, public_key->y);
-
-    mpz_t current_k, end_k;
-    mpz_init_set(current_k, thread_args->start_k);
-    mpz_init_set(end_k, thread_args->end_k);
+    mpz_set(thread_args->start_k, start_k);
+    mpz_set(thread_args->end_k, end_k);
 
     struct timespec last_update_time;
     clock_gettime(CLOCK_MONOTONIC, &last_update_time);
 
-    while (mpz_cmp(current_k, end_k) < 0 && !atomic_load(&found_collision)) {
+    while (mpz_cmp(thread_args->start_k, thread_args->end_k) < 0 && !atomic_load(&found_collision)) {
         ec_point_add(&result, &temp, public_key, p);
         mpz_set(temp.x, result.x);
         mpz_set(temp.y, result.y);
@@ -354,58 +354,30 @@ void *thread(void *arg) {
             mpz_sub(temp.y, p, temp.y);
         }
 
-        mpz_add_ui(current_k, current_k, 1);
+        mpz_add_ui(thread_args->start_k, thread_args->start_k, 1);
         atomic_fetch_add(&current_step, 1);
 
         show_progress(current_step, &last_update_time);
 
         if (ec_point_equal(&result, public_key)) {
             if (!atomic_load(&found_collision)) {
-                atomic_store(&private_key, mpz_get_ui(current_k));
+                atomic_store(&private_key, mpz_get_ui(thread_args->start_k));
                 atomic_store(&found_collision, 1);
                 mpz_t private_key_mpz;
                 mpz_init_set_ui(private_key_mpz, atomic_load(&private_key));
 
-                printf("\rCollision found! Private key: ");
+                printf("\rPrivate Key Found: ");
                 gmp_printf("%ZX\n", private_key_mpz);
-                printf("derived points: %" PRIuLEAST64 "\n", num_derived_points);
                 fflush(stdout);
 
                 FILE *file = fopen("KeysFound.txt", "a");
-                if (file == NULL) {
-                    perror("Error opening KeysFound.txt, is null!");
-                } else {
+                if (file != NULL) {
                     gmp_fprintf(file, "%ZX\n", private_key_mpz);
                     fclose(file);
                 }
                 mpz_clear(private_key_mpz);
             }
             break;
-        }
-
-        for (int i = 0; i < 2 * num_derived_points; i++) {
-            if (ec_point_equal(&result, &derived_points[i])) {
-                if (!atomic_load(&found_collision)) {
-                    atomic_store(&private_key, mpz_get_ui(current_k));
-                    atomic_store(&found_collision, 1);
-                    mpz_t private_key_mpz;
-                    mpz_init_set_ui(private_key_mpz, atomic_load(&private_key));
-
-                    printf("\rCollision found with derived point! Private key: ");
-                    gmp_printf("%ZX\n", private_key_mpz);
-                    fflush(stdout);
-
-                    FILE *file = fopen("KeysFound.txt", "a");
-                    if (file == NULL) {
-                        perror("Error opening KeysFound.txt, is null!");
-                    } else {
-                        gmp_fprintf(file, "%ZX\n", private_key_mpz);
-                        fclose(file);
-                    }
-                    mpz_clear(private_key_mpz);
-                }
-                break;
-            }
         }
     }
 
@@ -419,7 +391,7 @@ void *thread(void *arg) {
     }
     free(derived_points);
     mpz_clears(p, Gx, Gy, n, NULL);
-
+  
     return NULL;
 }
 
