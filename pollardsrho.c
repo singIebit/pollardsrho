@@ -381,7 +381,6 @@ void *thread(void *arg) {
         }
     }
 
-    mpz_clear(current_k);
     mpz_clear(end_k);
     mpz_clear(n_half);
     ec_point_clear(&temp);
