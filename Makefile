@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g -Wno-everything -pthread
+CFLAGS = -g -Wall -pthread
 LDFLAGS = -lm -lgmp
 
 SRCS = $(wildcard *.c)
